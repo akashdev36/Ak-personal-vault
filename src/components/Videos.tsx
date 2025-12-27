@@ -170,16 +170,17 @@ export default function Videos() {
         }
     }
 
-    const handleDeleteVideo = async (id: string) => {
-        try {
-            const updatedVideos = videos.filter(v => v.id !== id)
-            setVideos(updatedVideos)
-            await saveVideosToDrive(updatedVideos)
-            setSelectedVideo(null)
-        } catch (err) {
-            console.error('Error deleting video:', err)
-        }
-    }
+    // Unused - kept for future use
+    // const handleDeleteVideo = async (id: string) => {
+    //     try {
+    //         const updatedVideos = videos.filter(v => v.id !== id)
+    //         setVideos(updatedVideos)
+    //         await saveVideosToDrive(updatedVideos)
+    //         setSelectedVideo(null)
+    //     } catch (err) {
+    //         console.error('Error deleting video:', err)
+    //     }
+    // }
 
     const handleMultiDelete = async () => {
         if (selectedVideos.length === 0) return
@@ -210,15 +211,16 @@ export default function Videos() {
         video.url.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
-    const getEmbedUrl = (video: VideoItem) => {
-        if (video.platform === 'youtube' && video.embedId) {
-            return `https://www.youtube.com/embed/${video.embedId}?autoplay=1`
-        }
-        if (video.platform === 'instagram' && video.embedId) {
-            return `https://www.instagram.com/reel/${video.embedId}/embed`
-        }
-        return video.url
-    }
+    // Unused - kept for future use  
+    // const getEmbedUrl = (video: VideoItem) => {
+    //     if (video.platform === 'youtube' && video.embedId) {
+    //         return `https://www.youtube.com/embed/${video.embedId}?autoplay=1`
+    //     }
+    //     if (video.platform === 'instagram' && video.embedId) {
+    //         return `https://www.instagram.com/reel/${video.embedId}/embed`
+    //     }
+    //     return video.url
+    // }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-50 p-4">
