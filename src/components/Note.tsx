@@ -286,10 +286,10 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     }
 
     return (
-        <div className="flex h-screen bg-background">
+        <div className="flex h-screen bg-background overflow-hidden max-w-full">
             {/* Sidebar */}
             <div
-                className={`fixed left-0 top-16 bottom-0 w-80 bg-white border-r border-border shadow-lg transition-transform duration-300 z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                className={`fixed left-0 top-16 bottom-0 w-full sm:w-80 max-w-full bg-white border-r border-border shadow-lg transition-transform duration-300 z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
             >
                 <div className="flex flex-col h-full">
@@ -301,8 +301,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 <button
                                     onClick={toggleDeleteMode}
                                     className={`tap-target p-2 rounded-lg transition-colors ${isDeleteMode
-                                            ? 'bg-destructive text-white'
-                                            : 'bg-muted text-foreground hover:bg-secondary'
+                                        ? 'bg-destructive text-white'
+                                        : 'bg-muted text-foreground hover:bg-secondary'
                                         }`}
                                     title="Delete mode"
                                 >
@@ -349,8 +349,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                         <div className="flex-shrink-0 mt-1">
                                             <div
                                                 className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${selectedNotes.includes(note.id)
-                                                        ? 'bg-destructive border-destructive'
-                                                        : 'border-border'
+                                                    ? 'bg-destructive border-destructive'
+                                                    : 'border-border'
                                                     }`}
                                             >
                                                 {selectedNotes.includes(note.id) && (
@@ -430,7 +430,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
             </div>
 
             {/* Main Content */}
-            <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarOpen ? 'ml-80' : 'ml-0'}`}>
+            <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarOpen ? 'sm:ml-80' : 'ml-0'} max-w-full overflow-x-hidden`}>
                 {/* Note Editor */}
                 <div className="flex-1 p-4 sm:p-6">
                     <div className="max-w-4xl mx-auto h-full flex flex-col">
@@ -596,8 +596,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                     <button
                                         onClick={toggleLock}
                                         className={`tap-target p-2 rounded-lg transition-colors ${isLocked
-                                                ? 'bg-warning/20 text-warning'
-                                                : 'text-foreground/60 hover:text-foreground hover:bg-secondary'
+                                            ? 'bg-warning/20 text-warning'
+                                            : 'text-foreground/60 hover:text-foreground hover:bg-secondary'
                                             }`}
                                         title={isLocked ? 'Unlock (Read-only)' : 'Lock (Make read-only)'}
                                     >

@@ -44,8 +44,15 @@ const getOrCreateNotesFolder = async (): Promise<string> => {
 
         notesFolderId = createResponse.result.id!
         return notesFolderId!
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error getting/creating folder:', error)
+
+        // Handle authentication errors
+        if (error.status === 401 || error.status === 403) {
+            localStorage.clear()
+            window.location.reload()
+        }
+
         throw error
     }
 }
@@ -142,8 +149,15 @@ export const loadNotesFromDrive = async (): Promise<NoteItem[]> => {
             ...note,
             createdAt: new Date(note.createdAt),
         }))
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error loading notes from Drive:', error)
+
+        // Handle authentication errors
+        if (error.status === 401 || error.status === 403) {
+            localStorage.clear()
+            window.location.reload()
+        }
+
         return []
     }
 }
