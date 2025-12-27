@@ -139,4 +139,26 @@ body {
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* Fix for mobile contentEditable */
+  [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Ensure HTML renders properly on mobile */
+  .prose {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .prose * {
+    max-width: 100%;
+  }
+
+  /* Prevent HTML tags from showing */
+  .prose:focus {
+    outline: none;
+  }
 }

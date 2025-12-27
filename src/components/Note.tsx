@@ -3,6 +3,7 @@ import { saveNotesToDrive, loadNotesFromDrive, NoteItem } from '../services/note
 import { initializeGoogleAPI } from '../services/googleDrive'
 import { exportNoteToPDF } from '../services/pdfService'
 import Modal from './Modal'
+import ConfirmDialog from './ConfirmDialog'
 
 
 
@@ -14,7 +15,6 @@ interface NoteProps {
 export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NoteProps) {
     const [notes, setNotes] = useState<NoteItem[]>([])
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null)
-    const [noteContent, setNoteContent] = useState('')
     const [isSidebarOpen, setIsSidebarOpen] = useState(true)
     const [isDeleteMode, setIsDeleteMode] = useState(false)
     const [selectedNotes, setSelectedNotes] = useState<number[]>([])
@@ -22,37 +22,77 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     const [isLocked, setIsLocked] = useState(false)
     const [history, setHistory] = useState<string[]>([])
     const [historyIndex, setHistoryIndex] = useState(-1)
-    const [hasSelection, setHasSelection] = useState(false)
     const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
     const [editingTitle, setEditingTitle] = useState('')
     const [isSyncing, setIsSyncing] = useState(false)
     const [syncError, setSyncError] = useState<string | null>(null)
     const [isExportingPDF, setIsExportingPDF] = useState(false)
-    const [currentFont, setCurrentFont] = useState('Arial')
     const [showNewNoteModal, setShowNewNoteModal] = useState(false)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [showClearConfirm, setShowClearConfirm] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [hasSelection, setHasSelection] = useState(false)
+    const [selectedFont, setSelectedFont] = useState('Arial')
+    const [selectedSize, setSelectedSize] = useState('16')
+    const [showHeadingMenu, setShowHeadingMenu] = useState(false)
+    const [showColorPicker, setShowColorPicker] = useState(false)
+    const [showBgColorPicker, setShowBgColorPicker] = useState(false)
     const editorRef = useRef<HTMLDivElement>(null)
+    const saveTimeoutRef = useRef<number | null>(null)
 
-    // Load notes from Google Drive on mount
+    // Load notes from localStorage first (instant), then sync with Drive
     useEffect(() => {
         const loadNotes = async () => {
             try {
-                await initializeGoogleAPI()
-                const loadedNotes = await loadNotesFromDrive()
+                // Load from localStorage immediately for instant display
+                const backup = localStorage.getItem('notes_backup')
+                if (backup) {
+                    try {
+                        const localNotes = JSON.parse(backup).map((n: any) => ({
+                            ...n,
+                            createdAt: new Date(n.createdAt)
+                        }))
+                        // Sort notes
+                        localNotes.sort((a: NoteItem, b: NoteItem) => {
+                            if (a.isPinned && !b.isPinned) return -1
+                            if (!a.isPinned && b.isPinned) return 1
+                            return b.createdAt.getTime() - a.createdAt.getTime()
+                        })
+                        setNotes(localNotes)
 
-                if (loadedNotes.length > 0) {
-                    // Sort notes: pinned first, then by creation date (newest first)
-                    loadedNotes.sort((a, b) => {
+                        // Auto-open first note
+                        if (localNotes.length > 0 && !currentNoteId) {
+                            const firstNote = localNotes[0]
+                            setCurrentNoteId(firstNote.id)
+                            if (editorRef.current) {
+                                editorRef.current.innerHTML = firstNote.content
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse notes backup:', e)
+                    }
+                }
+
+                // Then sync with Google Drive in background
+                await initializeGoogleAPI()
+                const driveNotes = await loadNotesFromDrive()
+
+                if (driveNotes.length > 0) {
+                    // Sort notes
+                    driveNotes.sort((a: NoteItem, b: NoteItem) => {
                         if (a.isPinned && !b.isPinned) return -1
                         if (!a.isPinned && b.isPinned) return 1
                         return b.createdAt.getTime() - a.createdAt.getTime()
                     })
 
-                    setNotes(loadedNotes)
-                    // Auto-open first note if available and no note is currently selected
-                    if (!currentNoteId) {
-                        const firstNote = loadedNotes[0]
+                    setNotes(driveNotes)
+                    // Update localStorage with Drive data
+                    localStorage.setItem('notes_backup', JSON.stringify(driveNotes))
+
+                    // Auto-open first note if none selected
+                    if (!currentNoteId && driveNotes.length > 0) {
+                        const firstNote = driveNotes[0]
                         setCurrentNoteId(firstNote.id)
-                        setNoteContent(firstNote.content)
                         if (editorRef.current) {
                             editorRef.current.innerHTML = firstNote.content
                         }
@@ -65,18 +105,28 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         loadNotes()
     }, [])
 
-    // Auto-save notes to Google Drive
+    // Auto-save notes to Google Drive (debounced) + localStorage (instant)
     const syncNotes = async (updatedNotes: NoteItem[]) => {
-        setIsSyncing(true)
-        setSyncError(null)
-        try {
-            await saveNotesToDrive(updatedNotes)
-        } catch (error) {
-            console.error('Error syncing notes:', error)
-            setSyncError('Failed to sync')
-        } finally {
-            setIsSyncing(false)
+        // Save to localStorage immediately (instant backup)
+        localStorage.setItem('notes_backup', JSON.stringify(updatedNotes))
+
+        // Debounce Drive sync to avoid API spam
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
         }
+
+        saveTimeoutRef.current = setTimeout(async () => {
+            setIsSyncing(true)
+            setSyncError(null)
+            try {
+                await saveNotesToDrive(updatedNotes)
+            } catch (error) {
+                console.error('Error syncing notes:', error)
+                setSyncError('Failed to sync')
+            } finally {
+                setIsSyncing(false)
+            }
+        }, 2000) // Wait 2 seconds after last change before saving to Drive
     }
 
     const handleExportPDF = async () => {
@@ -96,12 +146,14 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         }
     }
 
-    // Track selection changes
+    // Track text selection for formatting toolbar
     useEffect(() => {
         const handleSelectionChange = () => {
             const selection = window.getSelection()
             if (editorRef.current?.contains(selection?.anchorNode || null)) {
                 setHasSelection(!!selection && selection.toString().length > 0)
+            } else {
+                setHasSelection(false)
             }
         }
 
@@ -110,6 +162,83 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
             document.removeEventListener('selectionchange', handleSelectionChange)
         }
     }, [])
+
+    // Rich text formatting functions - Apply only to selected text
+    const applyFormat = (command: string, value?: string) => {
+        document.execCommand(command, false, value)
+        editorRef.current?.focus()
+    }
+
+    const applyFontFamily = (font: string) => {
+        if (!hasSelection) return
+        setSelectedFont(font)
+        applyFormat('fontName', font)
+    }
+
+    const applyFontSize = (size: string) => {
+        if (!hasSelection) return
+        setSelectedSize(size)
+        // Wrap selection in span with font size
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            const span = document.createElement('span')
+            span.style.fontSize = `${size}px`
+            try {
+                range.surroundContents(span)
+            } catch (e) {
+                // If surrounding fails, use execCommand
+                applyFormat('fontSize', '7') // Large
+                // Then apply custom size
+                const sel = window.getSelection()
+                if (sel && sel.anchorNode && sel.anchorNode.parentElement) {
+                    sel.anchorNode.parentElement.style.fontSize = `${size}px`
+                }
+            }
+        }
+    }
+
+    const applyHeading = (level: 'h1' | 'h2' | 'h3') => {
+        if (!hasSelection) return
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            const span = document.createElement('span')
+            span.style.fontWeight = 'bold'
+
+            // Apply appropriate font size for heading level
+            switch (level) {
+                case 'h1':
+                    span.style.fontSize = '32px'
+                    break
+                case 'h2':
+                    span.style.fontSize = '24px'
+                    break
+                case 'h3':
+                    span.style.fontSize = '20px'
+                    break
+            }
+
+            try {
+                range.surroundContents(span)
+            } catch (e) {
+                // Fallback: apply bold and larger font
+                applyFormat('bold')
+                applyFontSize(level === 'h1' ? '32' : level === 'h2' ? '24' : '20')
+            }
+        }
+        setShowHeadingMenu(false)
+    }
+
+    const applyColor = (color: string) => {
+        applyFormat('foreColor', color)
+        setShowColorPicker(false)
+    }
+
+    const applyBackgroundColor = (color: string) => {
+        applyFormat('backColor', color)
+        setShowBgColorPicker(false)
+    }
 
     const toggleSidebar = () => {
         setIsSidebarOpen(!isSidebarOpen)
@@ -120,7 +249,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
             note.id === noteId ? { ...note, isPinned: !note.isPinned } : note
         )
         // Sort after toggling pin
-        updatedNotes.sort((a, b) => {
+        updatedNotes.sort((a: NoteItem, b: NoteItem) => {
             if (a.isPinned && !b.isPinned) return -1
             if (!a.isPinned && b.isPinned) return 1
             return b.createdAt.getTime() - a.createdAt.getTime()
@@ -133,12 +262,14 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         if (isDeleteMode) {
             toggleNoteSelection(note.id)
         } else {
-            setNoteContent(note.content)
             setCurrentNoteId(note.id)
             if (editorRef.current) {
                 editorRef.current.innerHTML = note.content
             }
-            setIsSidebarOpen(false)
+            // Only close sidebar on small screens (< 768px)
+            if (window.innerWidth < 768) {
+                setIsSidebarOpen(false)
+            }
         }
     }
 
@@ -155,7 +286,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         }
         const updatedNotes = [newNote, ...notes]
         setNotes(updatedNotes)
-        setNoteContent('')
         setCurrentNoteId(newNote.id)
         setIsSidebarOpen(false)
         if (editorRef.current) {
@@ -167,27 +297,27 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
 
     const saveCurrentNote = () => {
         if (currentNoteId && editorRef.current) {
-            const content = editorRef.current.innerHTML
-            setNoteContent(content)
+            // Save innerHTML to preserve formatting
+            const content = editorRef.current.innerHTML || ''
             const updatedNotes = notes.map(note =>
                 note.id === currentNoteId ? { ...note, content } : note
             )
             setNotes(updatedNotes)
             syncNotes(updatedNotes)
-        }
-    }
 
-    const handleContentChange = () => {
-        saveCurrentNote()
-        if (editorRef.current) {
-            const content = editorRef.current.innerHTML
+            // Add to history for undo/redo
             setHistory(prev => [...prev.slice(0, historyIndex + 1), content])
             setHistoryIndex(prev => prev + 1)
         }
     }
 
+    // Handle editor input with auto-save
     const handleInput = () => {
-        handleContentChange()
+        saveCurrentNote()
+    }
+
+    const handleContentChange = () => {
+        saveCurrentNote()
     }
 
     const toggleDeleteMode = () => {
@@ -204,13 +334,16 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     }
 
     const deleteSelectedNotes = () => {
+        setShowDeleteConfirm(true)
+    }
+
+    const confirmDelete = () => {
         const updatedNotes = notes.filter(note => !selectedNotes.includes(note.id))
         setNotes(updatedNotes)
         setSelectedNotes([])
         setIsDeleteMode(false)
         if (currentNoteId && selectedNotes.includes(currentNoteId)) {
             setCurrentNoteId(null)
-            setNoteContent('')
             if (editorRef.current) {
                 editorRef.current.innerHTML = ''
             }
@@ -241,22 +374,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         setEditingTitle('')
     }
 
-    const makeBold = () => document.execCommand('bold')
-    const makeHighlight = () => document.execCommand('backColor', false, '#FFFF00')
-    const makeH1 = () => document.execCommand('formatBlock', false, '<h1>')
-    const makeH2 = () => document.execCommand('formatBlock', false, '<h2>')
-    const makeH3 = () => document.execCommand('formatBlock', false, '<h3>')
 
-    const applyColor = (color: string) => {
-        document.execCommand('foreColor', false, color)
-        handleContentChange()
-    }
-
-    const applyFont = (font: string) => {
-        document.execCommand('fontName', false, font)
-        setCurrentFont(font)
-        handleContentChange()
-    }
 
     const toggleLock = () => setIsLocked(!isLocked)
 
@@ -279,11 +397,22 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     }
 
     const handleClear = () => {
+        setShowClearConfirm(true)
+    }
+
+    const confirmClear = () => {
         if (editorRef.current && !isLocked) {
             editorRef.current.innerHTML = ''
             handleContentChange()
         }
+        setShowClearConfirm(false)
     }
+
+    // Filter notes by search query
+    const filteredNotes = notes.filter(note =>
+        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.content.toLowerCase().includes(searchQuery.toLowerCase())
+    )
 
     return (
         <div className="flex h-screen bg-background overflow-hidden max-w-full">
@@ -321,6 +450,26 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 </button>
                             </div>
                         </div>
+
+                        {/* Search Bar */}
+                        <div className="relative mb-4">
+                            <svg
+                                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Search notes..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all text-sm"
+                            />
+                        </div>
+
                         {isDeleteMode && selectedNotes.length > 0 && (
                             <button
                                 onClick={deleteSelectedNotes}
@@ -333,7 +482,15 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
 
                     {/* Notes List */}
                     <div className="flex-1 overflow-y-auto">
-                        {notes.map((note) => (
+                        {filteredNotes.length === 0 && searchQuery && (
+                            <div className="text-center py-8 text-foreground/60">
+                                <svg className="w-12 h-12 mx-auto mb-2 text-foreground/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <p className="text-sm">No notes found</p>
+                            </div>
+                        )}
+                        {filteredNotes.map((note) => (
                             <div
                                 key={note.id}
                                 onClick={(e) => {
@@ -425,6 +582,26 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 </div>
                             </div>
                         ))}
+
+                        {/* Empty State */}
+                        {filteredNotes.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-12 text-center">
+                                <svg className="w-16 h-16 text-foreground/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <p className="text-foreground/60 mb-4">
+                                    {searchQuery ? 'No notes found' : 'No notes yet'}
+                                </p>
+                                {!searchQuery && (
+                                    <button
+                                        onClick={createNewNote}
+                                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                    >
+                                        Create your first note
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -434,52 +611,234 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                 {/* Note Editor */}
                 <div className="flex-1 p-4 sm:p-6">
                     <div className="max-w-4xl mx-auto h-full flex flex-col">
-                        {/* Top Toolbar */}
+                        {/* Top Toolbar - Modern Rich Text Editor */}
                         {isToolbarVisible && (
-                            <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={onToggleGlobalHeader}
-                                        className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors"
-                                        title={showGlobalHeader ? "Minimize (hide header)" : "Maximize (show header)"}
-                                    >
-                                        {showGlobalHeader ? (
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            </svg>
+                            <div className="flex items-center gap-4 mb-4 pb-3 border-b border-border flex-wrap">
+                                {/* Group 1: Sidebar Toggle */}
+                                <button
+                                    onClick={toggleSidebar}
+                                    className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all"
+                                    title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        {isSidebarOpen ? (
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                         ) : (
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                            </svg>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                         )}
+                                    </svg>
+                                </button>
+
+                                {/* Header Toggle - Right next to sidebar */}
+                                <button
+                                    onClick={onToggleGlobalHeader}
+                                    className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all"
+                                    title={showGlobalHeader ? "Hide Header" : "Show Header"}
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        {showGlobalHeader ? (
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                        ) : (
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        )}
+                                    </svg>
+                                </button>
+
+                                <div className="w-px h-8 bg-border"></div>
+
+                                {/* Group 2: Font Controls */}
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={selectedFont}
+                                        onChange={(e) => applyFontFamily(e.target.value)}
+                                        disabled={!hasSelection}
+                                        className="px-3 py-1.5 text-sm border border-border rounded-lg bg-white hover:bg-secondary transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="Arial">Arial</option>
+                                        <option value="Times New Roman">Times New Roman</option>
+                                        <option value="Courier New">Courier New</option>
+                                        <option value="Georgia">Georgia</option>
+                                        <option value="Verdana">Verdana</option>
+                                    </select>
+
+                                    <select
+                                        value={selectedSize}
+                                        onChange={(e) => applyFontSize(e.target.value)}
+                                        disabled={!hasSelection}
+                                        className="px-3 py-1.5 text-sm border border-border rounded-lg bg-white hover:bg-secondary transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="12">12</option>
+                                        <option value="14">14</option>
+                                        <option value="16">16</option>
+                                        <option value="18">18</option>
+                                        <option value="20">20</option>
+                                        <option value="24">24</option>
+                                        <option value="32">32</option>
+                                    </select>
+                                </div>
+
+                                <div className="w-px h-8 bg-border"></div>
+
+                                {/* Group 3: Text Formatting (enabled when text selected) */}
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => applyFormat('bold')}
+                                        disabled={!hasSelection}
+                                        className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                        title="Bold (Ctrl+B)"
+                                    >
+                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z" />
+                                        </svg>
                                     </button>
 
-                                    {/* Current Note Title with Sync Status */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowHeadingMenu(!showHeadingMenu)}
+                                            disabled={!hasSelection}
+                                            className="px-3 py-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+                                            title="Heading"
+                                        >
+                                            <span className="font-bold text-sm">H</span>
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                        {showHeadingMenu && hasSelection && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setShowHeadingMenu(false)} />
+                                                <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
+                                                    <button onClick={() => applyHeading('h1')} className="w-full px-4 py-2 text-left hover:bg-secondary text-2xl font-bold transition-colors">
+                                                        H1
+                                                    </button>
+                                                    <button onClick={() => applyHeading('h2')} className="w-full px-4 py-2 text-left hover:bg-secondary text-xl font-bold transition-colors">
+                                                        H2
+                                                    </button>
+                                                    <button onClick={() => applyHeading('h3')} className="w-full px-4 py-2 text-left hover:bg-secondary text-lg font-bold transition-colors">
+                                                        H3
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Text Color Picker */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowColorPicker(!showColorPicker)}
+                                            disabled={!hasSelection}
+                                            className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                            title="Text Color"
+                                        >
+                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                                            </svg>
+                                        </button>
+                                        {showColorPicker && hasSelection && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
+                                                <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-lg shadow-xl z-50 p-3">
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="text-xs font-medium text-foreground/70">Text Color</label>
+                                                        <input
+                                                            type="color"
+                                                            onChange={(e) => applyColor(e.target.value)}
+                                                            className="w-32 h-10 rounded cursor-pointer"
+                                                            defaultValue="#000000"
+                                                        />
+                                                        <div className="grid grid-cols-5 gap-1">
+                                                            {['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080', '#008000'].map(color => (
+                                                                <button
+                                                                    key={color}
+                                                                    onClick={() => applyColor(color)}
+                                                                    className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
+                                                                    style={{ backgroundColor: color }}
+                                                                    title={color}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Background Color Picker */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => setShowBgColorPicker(!showBgColorPicker)}
+                                            disabled={!hasSelection}
+                                            className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                            title="Highlight Color"
+                                        >
+                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.59-.59 1.54 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z" />
+                                            </svg>
+                                        </button>
+                                        {showBgColorPicker && hasSelection && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setShowBgColorPicker(false)} />
+                                                <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-lg shadow-xl z-50 p-3">
+                                                    <div className="flex flex-col gap-2">
+                                                        <label className="text-xs font-medium text-foreground/70">Highlight Color</label>
+                                                        <input
+                                                            type="color"
+                                                            onChange={(e) => applyBackgroundColor(e.target.value)}
+                                                            className="w-32 h-10 rounded cursor-pointer"
+                                                            defaultValue="#FFFF00"
+                                                        />
+                                                        <div className="grid grid-cols-5 gap-1">
+                                                            {['#FFFF00', '#00FFFF', '#FF00FF', '#FFA500', '#90EE90', '#FFB6C1', '#DDA0DD', '#F0E68C', '#E0FFFF', '#FFE4B5'].map(color => (
+                                                                <button
+                                                                    key={color}
+                                                                    onClick={() => applyBackgroundColor(color)}
+                                                                    className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
+                                                                    style={{ backgroundColor: color }}
+                                                                    title={color}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Spacer - pushes right side to the end */}
+                                <div className="flex-1"></div>
+
+                                {/* Group 4: Utility Buttons (Far Right) */}
+                                <div className="flex items-center gap-2">
+                                    {/* Current note info */}
                                     {currentNoteId && (
-                                        <div className="flex items-center gap-2 text-xs">
-                                            {/* Sync/Error Icon */}
+                                        <div className="flex items-center gap-2 px-3 py-1 bg-secondary/50 rounded-lg">
                                             {isSyncing ? (
                                                 <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                                             ) : syncError ? (
                                                 <svg className="w-4 h-4 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
-                                            ) : null}
-
-                                            {/* Note Title */}
-                                            <span className={`font-medium ${syncError ? 'text-destructive' : 'text-foreground/70'}`}>
+                                            ) : (
+                                                <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                            )}
+                                            <span className="text-xs font-medium text-foreground/70 truncate max-w-[150px]">
                                                 {notes.find(n => n.id === currentNoteId)?.title || 'Untitled'}
                                             </span>
                                         </div>
                                     )}
 
-                                    {/* Save as PDF Button */}
+                                    <div className="w-px h-6 bg-border"></div>
+
+                                    {/* PDF Export */}
                                     {currentNoteId && (
                                         <button
                                             onClick={handleExportPDF}
                                             disabled={isExportingPDF}
-                                            className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-50"
-                                            title="Save as PDF to Drive"
+                                            className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                                            title="Export as PDF"
                                         >
                                             {isExportingPDF ? (
                                                 <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -491,115 +850,14 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                         </button>
                                     )}
 
-                                    <button
-                                        onClick={toggleSidebar}
-                                        className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors"
-                                        title="Toggle sidebar"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                <div className="flex gap-1">
-                                    {/* Formatting buttons */}
-                                    <button
-                                        onClick={makeBold}
-                                        disabled={isLocked || !hasSelection}
-                                        className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Bold"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6z M6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={makeHighlight}
-                                        disabled={isLocked || !hasSelection}
-                                        className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Highlight"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-                                        </svg>
-                                    </button>
-
-                                    {/* Headings dropdown */}
-                                    <div className="relative group">
-                                        <button
-                                            disabled={isLocked || !hasSelection}
-                                            className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                            title="Headings"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                                            </svg>
-                                        </button>
-                                        {!isLocked && hasSelection && (
-                                            <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg py-1 z-10">
-                                                <button onClick={makeH1} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors text-lg font-bold">H1</button>
-                                                <button onClick={makeH2} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors text-base font-bold">H2</button>
-                                                <button onClick={makeH3} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors text-sm font-bold">H3</button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Color picker */}
-                                    <div className="relative group">
-                                        <button
-                                            disabled={isLocked || !hasSelection}
-                                            className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                            title="Text Color"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                                            </svg>
-                                        </button>
-                                        {!isLocked && hasSelection && (
-                                            <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg p-2 z-10">
-                                                <div className="grid grid-cols-4 gap-2">
-                                                    <button onClick={() => applyColor('#000000')} className="w-8 h-8 rounded bg-black border border-border"></button>
-                                                    <button onClick={() => applyColor('#FF0000')} className="w-8 h-8 rounded bg-red-500 border border-border"></button>
-                                                    <button onClick={() => applyColor('#00FF00')} className="w-8 h-8 rounded bg-green-500 border border-border"></button>
-                                                    <button onClick={() => applyColor('#0000FF')} className="w-8 h-8 rounded bg-blue-500 border border-border"></button>
-                                                    <button onClick={() => applyColor('#FFFF00')} className="w-8 h-8 rounded bg-yellow-400 border border-border"></button>
-                                                    <button onClick={() => applyColor('#FF00FF')} className="w-8 h-8 rounded bg-purple-500 border border-border"></button>
-                                                    <button onClick={() => applyColor('#00FFFF')} className="w-8 h-8 rounded bg-cyan-400 border border-border"></button>
-                                                    <button onClick={() => applyColor('#FFA500')} className="w-8 h-8 rounded bg-orange-500 border border-border"></button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Font Family Picker */}
-                                    <div className="relative group">
-                                        <button
-                                            className="tap-target px-3 py-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors text-sm font-medium min-w-[100px] text-left"
-                                            title="Font Family"
-                                        >
-                                            {currentFont}
-                                        </button>
-                                        <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg py-1 z-10 min-w-[150px]">
-                                            <button onClick={() => applyFont('Arial')} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors" style={{ fontFamily: 'Arial' }}>Arial</button>
-                                            <button onClick={() => applyFont('Georgia')} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors" style={{ fontFamily: 'Georgia' }}>Georgia</button>
-                                            <button onClick={() => applyFont('Times New Roman')} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors" style={{ fontFamily: 'Times New Roman' }}>Times New Roman</button>
-                                            <button onClick={() => applyFont('Courier New')} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors" style={{ fontFamily: 'Courier New' }}>Courier New</button>
-                                            <button onClick={() => applyFont('Verdana')} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors" style={{ fontFamily: 'Verdana' }}>Verdana</button>
-                                            <button onClick={() => applyFont('Comic Sans MS')} className="w-full px-4 py-2 text-left hover:bg-secondary transition-colors" style={{ fontFamily: 'Comic Sans MS' }}>Comic Sans MS</button>
-                                        </div>
-                                    </div>
-
-                                    <div className="w-px h-6 bg-border mx-1"></div>
-
-                                    {/* Lock button */}
+                                    {/* Lock */}
                                     <button
                                         onClick={toggleLock}
-                                        className={`tap-target p-2 rounded-lg transition-colors ${isLocked
+                                        className={`p-2 rounded-lg transition-all ${isLocked
                                             ? 'bg-warning/20 text-warning'
                                             : 'text-foreground/60 hover:text-foreground hover:bg-secondary'
                                             }`}
-                                        title={isLocked ? 'Unlock (Read-only)' : 'Lock (Make read-only)'}
+                                        title={isLocked ? 'Unlock' : 'Lock (Read-only)'}
                                     >
                                         {isLocked ? (
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -612,13 +870,13 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                         )}
                                     </button>
 
-                                    <div className="w-px h-6 bg-border mx-1"></div>
+                                    <div className="w-px h-6 bg-border"></div>
 
                                     {/* Undo/Redo */}
                                     <button
                                         onClick={undo}
                                         disabled={historyIndex <= 0 || isLocked}
-                                        className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                        className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                         title="Undo"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -628,7 +886,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                     <button
                                         onClick={redo}
                                         disabled={historyIndex >= history.length - 1 || isLocked}
-                                        className="tap-target p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                        className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                         title="Redo"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -636,18 +894,17 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                         </svg>
                                     </button>
 
-                                    <div className="w-px h-6 bg-border mx-1"></div>
-
                                     <button
                                         onClick={handleClear}
                                         disabled={isLocked}
-                                        className="tap-target p-2 rounded-lg text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                        className="p-2 rounded-lg text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                         title="Clear"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
+
                                 </div>
                             </div>
                         )}
@@ -668,7 +925,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                         <div
                             ref={editorRef}
                             contentEditable={!isLocked}
-                            className={`prose w-full min-h-[300px] p-4 outline-none ${isLocked ? 'bg-muted/30 cursor-not-allowed' : 'bg-background'
+                            dir="ltr"
+                            className={`w-full min-h-[400px] max-h-[600px] overflow-y-auto p-6 outline-none border border-border rounded-lg text-base leading-relaxed ${isLocked ? 'bg-muted/30 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-primary/20'
                                 }`}
                             onInput={handleInput}
                             onMouseUp={() => { }}
@@ -678,9 +936,19 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                             spellCheck={true}
                             autoCorrect="on"
                             autoCapitalize="on"
-                        >
-                            {noteContent}
-                        </div>
+                            data-gramm="false"
+                            data-gramm_editor="false"
+                            data-enable-grammarly="false"
+                        />
+
+                        {/* CSS for placeholder effect */}
+                        <style>{`
+                            [contentEditable="true"]:empty:before {
+                                content: attr(data-placeholder);
+                                color: #9CA3AF;
+                                cursor: text;
+                            }
+                        `}</style>
                     </div>
                 </div>
             </div>
@@ -694,6 +962,30 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                 placeholder="Enter note title..."
                 confirmText="Create"
                 cancelText="Cancel"
+            />
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={confirmDelete}
+                title="Delete Notes"
+                message={`Are you sure you want to delete ${selectedNotes.length} note${selectedNotes.length > 1 ? 's' : ''}? This action cannot be undone.`}
+                confirmText="Delete"
+                cancelText="Cancel"
+                isDangerous={true}
+            />
+
+            {/* Clear Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showClearConfirm}
+                onClose={() => setShowClearConfirm(false)}
+                onConfirm={confirmClear}
+                title="Clear Note Content"
+                message="Are you sure you want to clear all content from this note? This action cannot be undone."
+                confirmText="Clear"
+                cancelText="Cancel"
+                isDangerous={true}
             />
         </div>
     )

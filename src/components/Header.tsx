@@ -79,6 +79,15 @@ export default function Header({ onPageChange, currentPage, onSignOut }: HeaderP
                             >
                                 Note
                             </button>
+                            <button
+                                onClick={() => handleNavClick('videos')}
+                                className={`tap-target px-4 py-3 rounded-lg text-left font-medium transition-colors ${currentPage === 'videos'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'text-foreground hover:bg-secondary'
+                                    }`}
+                            >
+                                Videos
+                            </button>
                         </div>
                     </nav>
                 )}

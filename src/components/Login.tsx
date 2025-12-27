@@ -31,6 +31,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     return (
         <div className="min-h-screen bg-background flex items-center justify-center p-4">
             <div className="max-w-md w-full">
+                {/* Welcome Message */}
+                <div className="text-center mb-8">
+                    <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-2">
+                        Welcome Back
+                    </h1>
+                </div>
+
                 <div className="bg-white rounded-3xl shadow-2xl p-8 sm:p-12 text-center">
                     {/* App Icon/Logo */}
                     <div className="w-20 h-20 bg-gradient-to-br from-primary to-accent rounded-2xl mx-auto mb-6 flex items-center justify-center">
