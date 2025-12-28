@@ -50,14 +50,14 @@ export default function Videos() {
             }
 
             let finalPlatform = parsed.platform
-            let finalEmbedId = parsed.id
+            let finalEmbedId = parsed.embedId
             let thumbnail: string | undefined
 
             // Handle Instagram videos (extract and upload to YouTube)
             if (parsed.platform === 'instagram') {
                 try {
                     setUploadStatus('Extracting Instagram video...')
-                    const extracted = await extractInstagramVideoUrl(parsed.id)
+                    const extracted = await extractInstagramVideoUrl(parsed.embedId)
 
                     if (!extracted || !extracted.videoUrl) {
                         setError('Failed to extract Instagram video. Please ensure the reel is public.')
@@ -88,7 +88,7 @@ export default function Videos() {
                     return
                 }
             } else if (parsed.platform === 'youtube') {
-                thumbnail = getYouTubeThumbnail(parsed.id)
+                thumbnail = getYouTubeThumbnail(parsed.embedId)
             }
 
             // Create new video object
@@ -99,7 +99,7 @@ export default function Videos() {
                 title: newVideoTitle.trim() || `${finalPlatform.charAt(0).toUpperCase() + finalPlatform.slice(1)} Video`,
                 thumbnail,
                 embedId: finalEmbedId,
-                extractedVideoUrl: parsed.platform === 'instagram' ? await extractInstagramVideoUrl(parsed.id).then(e => e?.videoUrl) : undefined,
+                extractedVideoUrl: parsed.platform === 'instagram' ? await extractInstagramVideoUrl(parsed.embedId).then(e => e?.videoUrl) : undefined,
                 addedAt: new Date()
             }
 
@@ -388,7 +388,7 @@ export default function Videos() {
                     confirmDelete()
                     setShowDeleteConfirm(false)
                 }}
-                onCancel={() => setShowDeleteConfirm(false)}
+                onClose={() => setShowDeleteConfirm(false)}
             />
         </div>
     )
