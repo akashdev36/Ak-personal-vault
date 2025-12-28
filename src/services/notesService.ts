@@ -14,6 +14,11 @@ let notesFolderId: string | null = null
 // Get or create the notes folder in Google Drive
 const getOrCreateNotesFolder = async (): Promise<string> => {
     try {
+        // Ensure API is loaded
+        if (!window.gapi?.client?.drive) {
+            throw new Error('Google Drive API not loaded')
+        }
+
         // Refresh token if needed
         await refreshTokenIfNeeded()
 

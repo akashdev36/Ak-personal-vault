@@ -21,6 +21,11 @@ export interface GoogleUser {
 export const initializeGoogleAPI = (): Promise<void> => {
     return new Promise((resolve, reject) => {
         if (gapiInitialized) {
+            // If already initialized, restore token if exists
+            const user = getCurrentUser()
+            if (user && window.gapi?.client) {
+                window.gapi.client.setToken({ access_token: user.accessToken })
+            }
             resolve()
             return
         }
@@ -34,6 +39,13 @@ export const initializeGoogleAPI = (): Promise<void> => {
                         discoveryDocs: GOOGLE_CONFIG.discoveryDocs,
                     })
                     gapiInitialized = true
+
+                    // Restore token if user was logged in before refresh
+                    const user = getCurrentUser()
+                    if (user) {
+                        window.gapi.client.setToken({ access_token: user.accessToken })
+                    }
+
                     resolve()
                 } catch (error) {
                     reject(error)
@@ -193,7 +205,23 @@ export const getCurrentUser = (): GoogleUser | null => {
     return JSON.parse(userStr)
 }
 
-// Check if user is authenticated
+// Check if user is authenticated and token is valid
 export const isAuthenticated = (): boolean => {
-    return getCurrentUser() !== null
+    const user = getCurrentUser()
+    if (!user) return false
+
+    // Check if token has expired
+    const expiryStr = localStorage.getItem('tokenExpiry')
+    if (!expiryStr) return false
+
+    const expiry = parseInt(expiryStr)
+    const now = Date.now()
+
+    // If token expired, clear session
+    if (now >= expiry) {
+        signOut()
+        return false
+    }
+
+    return true
 }

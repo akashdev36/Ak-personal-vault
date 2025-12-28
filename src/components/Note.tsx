@@ -4,6 +4,7 @@ import { initializeGoogleAPI } from '../services/googleDrive'
 import { exportNoteToPDF } from '../services/pdfService'
 import Modal from './Modal'
 import ConfirmDialog from './ConfirmDialog'
+import { useAppData } from '../contexts/AppDataContext'
 
 
 
@@ -13,7 +14,8 @@ interface NoteProps {
 }
 
 export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NoteProps) {
-    const [notes, setNotes] = useState<NoteItem[]>([])
+    const { notes: contextNotes, setNotes: setContextNotes } = useAppData()
+    const [notes, setNotes] = useState<NoteItem[]>(contextNotes)
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null)
     const [isSidebarOpen, setIsSidebarOpen] = useState(true)
     const [isDeleteMode, setIsDeleteMode] = useState(false)
@@ -40,40 +42,60 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     const editorRef = useRef<HTMLDivElement>(null)
     const saveTimeoutRef = useRef<number | null>(null)
 
-    // Load notes from localStorage first (instant), then sync with Drive
+    // Use preloaded notes from context
     useEffect(() => {
-        const loadNotes = async () => {
-            try {
-                // Load from localStorage immediately for instant display
-                const backup = localStorage.getItem('notes_backup')
-                if (backup) {
-                    try {
-                        const localNotes = JSON.parse(backup).map((n: any) => ({
-                            ...n,
-                            createdAt: new Date(n.createdAt)
-                        }))
-                        // Sort notes
-                        localNotes.sort((a: NoteItem, b: NoteItem) => {
-                            if (a.isPinned && !b.isPinned) return -1
-                            if (!a.isPinned && b.isPinned) return 1
-                            return b.createdAt.getTime() - a.createdAt.getTime()
-                        })
-                        setNotes(localNotes)
+        if (contextNotes.length > 0) {
+            setNotes(contextNotes)
 
-                        // Auto-open first note
-                        if (localNotes.length > 0 && !currentNoteId) {
-                            const firstNote = localNotes[0]
-                            setCurrentNoteId(firstNote.id)
-                            if (editorRef.current) {
-                                editorRef.current.innerHTML = firstNote.content
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Failed to parse notes backup:', e)
-                    }
+            // Auto-open first note if none selected
+            if (!currentNoteId) {
+                const firstNote = contextNotes[0]
+                setCurrentNoteId(firstNote.id)
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = firstNote.content
                 }
+            }
+        } else {
+            // Fallback: load if context is empty (shouldn't happen with preloading)
+            loadNotes()
+        }
+    }, [contextNotes])
 
-                // Then sync with Google Drive in background
+    // Load notes from localStorage first (instant), then sync with Drive
+    const loadNotes = async () => {
+        try {
+            // Load from localStorage immediately for instant display
+            const backup = localStorage.getItem('notes_backup')
+            if (backup) {
+                try {
+                    const localNotes = JSON.parse(backup).map((n: any) => ({
+                        ...n,
+                        createdAt: new Date(n.createdAt)
+                    }))
+                    // Sort notes
+                    localNotes.sort((a: NoteItem, b: NoteItem) => {
+                        if (a.isPinned && !b.isPinned) return -1
+                        if (!a.isPinned && b.isPinned) return 1
+                        return b.createdAt.getTime() - a.createdAt.getTime()
+                    })
+                    setNotes(localNotes)
+                    setContextNotes(localNotes)
+
+                    // Auto-open first note
+                    if (localNotes.length > 0 && !currentNoteId) {
+                        const firstNote = localNotes[0]
+                        setCurrentNoteId(firstNote.id)
+                        if (editorRef.current) {
+                            editorRef.current.innerHTML = firstNote.content
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to parse notes backup:', e)
+                }
+            }
+
+            // Then sync with Google Drive in background
+            try {
                 await initializeGoogleAPI()
                 const driveNotes = await loadNotesFromDrive()
 
@@ -86,6 +108,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                     })
 
                     setNotes(driveNotes)
+                    setContextNotes(driveNotes)
                     // Update localStorage with Drive data
                     localStorage.setItem('notes_backup', JSON.stringify(driveNotes))
 
@@ -98,36 +121,80 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                         }
                     }
                 }
-            } catch (error) {
-                console.error('Error loading notes:', error)
+            } catch (driveError) {
+                console.warn('Could not sync with Google Drive (offline mode):', driveError)
+                // Continue using localStorage notes - user can still work offline
             }
+        } catch (error) {
+            console.error('Error loading notes:', error)
         }
-        loadNotes()
-    }, [])
+    }
 
-    // Auto-save notes to Google Drive (debounced) + localStorage (instant)
+    // Auto-save to localStorage only (debounced while typing)
     const syncNotes = async (updatedNotes: NoteItem[]) => {
-        // Save to localStorage immediately (instant backup)
-        localStorage.setItem('notes_backup', JSON.stringify(updatedNotes))
-
-        // Debounce Drive sync to avoid API spam
+        // Clear any pending save
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current)
         }
 
-        saveTimeoutRef.current = setTimeout(async () => {
-            setIsSyncing(true)
-            setSyncError(null)
+        // Debounce: wait 2 seconds after last change before saving to localStorage
+        saveTimeoutRef.current = window.setTimeout(async () => {
             try {
-                await saveNotesToDrive(updatedNotes)
+                // Save to localStorage only (fast, no API call)
+                localStorage.setItem('notes_backup', JSON.stringify(updatedNotes))
+
+                // Update context
+                setContextNotes(updatedNotes)
+
+                console.log('Notes saved to localStorage')
             } catch (error) {
-                console.error('Error syncing notes:', error)
-                setSyncError('Failed to sync')
-            } finally {
-                setIsSyncing(false)
+                console.error('Failed to save notes to localStorage:', error)
             }
-        }, 2000) // Wait 2 seconds after last change before saving to Drive
+        }, 2000) // 2 second debounce
     }
+
+    // Force sync immediately (when closing/switching notes)
+    const forceSyncNotes = async (notesToSync: NoteItem[]) => {
+        // Cancel any pending debounced save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
+        }
+
+        try {
+            setIsSyncing(true)
+
+            // Always save to localStorage first (fast, reliable)
+            localStorage.setItem('notes_backup', JSON.stringify(notesToSync))
+
+            // Update context
+            setContextNotes(notesToSync)
+
+            // Only sync to Drive if API is ready
+            // @ts-ignore - gapi might not be defined
+            if (window.gapi?.client?.drive) {
+                await saveNotesToDrive(notesToSync)
+                console.log('Notes force synced to Drive')
+            } else {
+                console.log('Notes saved to localStorage (Drive API not ready)')
+            }
+        } catch (error) {
+            console.error('Force sync failed:', error)
+            // Don't throw - localStorage save already succeeded
+        } finally {
+            setIsSyncing(false)
+        }
+    }
+
+    // Force sync when component unmounts or user navigates away
+    useEffect(() => {
+        return () => {
+            // Force sync current notes before unmounting
+            if (notes.length > 0) {
+                forceSyncNotes(notes)
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // Empty dependency - only run on mount/unmount
 
     const handleExportPDF = async () => {
         if (!currentNoteId) return
@@ -241,6 +308,13 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     }
 
     const toggleSidebar = () => {
+        // If opening sidebar and has current note, force sync before showing list
+        if (!isSidebarOpen && currentNoteId && editorRef.current) {
+            saveCurrentNote()
+            setTimeout(() => {
+                forceSyncNotes(notes)
+            }, 100)
+        }
         setIsSidebarOpen(!isSidebarOpen)
     }
 
@@ -262,12 +336,25 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         if (isDeleteMode) {
             toggleNoteSelection(note.id)
         } else {
+            // Save current note before switching
+            if (currentNoteId && editorRef.current) {
+                saveCurrentNote()
+                // Force sync after a brief delay to ensure current note is saved
+                setTimeout(() => {
+                    forceSyncNotes(notes)
+                }, 100)
+            }
+
             setCurrentNoteId(note.id)
             if (editorRef.current) {
                 editorRef.current.innerHTML = note.content
             }
-            // Only close sidebar on small screens (< 768px)
-            if (window.innerWidth < 768) {
+            // Clear history when switching notes
+            setHistory([note.content])
+            setHistoryIndex(0)
+
+            // Close sidebar on mobile after selecting note
+            if (window.innerWidth < 640) {
                 setIsSidebarOpen(false)
             }
         }
@@ -416,9 +503,9 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
 
     return (
         <div className="flex h-screen bg-background overflow-hidden max-w-full">
-            {/* Sidebar */}
+            {/* Sidebar - Full screen on mobile, side panel on desktop */}
             <div
-                className={`fixed left-0 top-16 bottom-0 w-full sm:w-80 max-w-full bg-white border-r border-border shadow-lg transition-transform duration-300 z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                className={`fixed inset-0 sm:left-0 sm:top-16 sm:bottom-0 sm:w-80 sm:max-w-full bg-white border-r border-border shadow-lg transition-transform duration-300 z-50 sm:z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
             >
                 <div className="flex flex-col h-full">
@@ -446,6 +533,16 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </button>
+                                {/* Back arrow - visible on mobile only */}
+                                <button
+                                    onClick={toggleSidebar}
+                                    className="sm:hidden tap-target p-2 rounded-lg bg-muted text-foreground hover:bg-secondary transition-colors"
+                                    title="Close sidebar"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
                             </div>
@@ -543,7 +640,9 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                                         <path d="M16 12V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                                                     </svg>
                                                 )}
-                                                <h3 className="font-semibold text-foreground truncate flex-1">{note.title}</h3>
+                                                <h3 className={`text-foreground truncate flex-1 ${currentNoteId === note.id ? 'font-bold' : 'font-semibold'}`}>
+                                                    {note.title}
+                                                </h3>
                                                 {!isDeleteMode && (
                                                     <button
                                                         onClick={(e) => startEditingTitle(note, e)}
@@ -607,13 +706,13 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
             </div>
 
             {/* Main Content */}
-            <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarOpen ? 'sm:ml-80' : 'ml-0'} max-w-full overflow-x-hidden`}>
-                {/* Note Editor */}
-                <div className="flex-1 p-4 sm:p-6">
-                    <div className="max-w-4xl mx-auto h-full flex flex-col">
-                        {/* Top Toolbar - Modern Rich Text Editor */}
-                        {isToolbarVisible && (
-                            <div className="flex items-center gap-4 mb-4 pb-3 border-b border-border flex-wrap">
+            <div className={`flex flex-col transition-all duration-300 ${isSidebarOpen ? 'sm:ml-80' : 'ml-0'} max-w-full overflow-hidden h-screen`}>
+                {/* Top Toolbar - Sticky at top, doesn't scroll */}
+                {/* Hide on mobile when sidebar is open (browsing notes), show when sidebar closed (editing) */}
+                {isToolbarVisible && (!isSidebarOpen || window.innerWidth >= 640) && (
+                    <div className="sticky top-0 z-40 bg-background border-b border-border px-4 sm:px-6 py-3">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="flex items-center gap-4 flex-wrap">
                                 {/* Group 1: Sidebar Toggle */}
                                 <button
                                     onClick={toggleSidebar}
@@ -625,21 +724,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                         ) : (
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        )}
-                                    </svg>
-                                </button>
-
-                                {/* Header Toggle - Right next to sidebar */}
-                                <button
-                                    onClick={onToggleGlobalHeader}
-                                    className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all"
-                                    title={showGlobalHeader ? "Hide Header" : "Show Header"}
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        {showGlobalHeader ? (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                        ) : (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         )}
                                     </svg>
                                 </button>
@@ -803,6 +887,18 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                             </>
                                         )}
                                     </div>
+
+                                    {/* Underline button */}
+                                    <button
+                                        onClick={() => applyFormat('underline')}
+                                        disabled={!hasSelection}
+                                        className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                        title="Underline (Ctrl+U)"
+                                    >
+                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z" />
+                                        </svg>
+                                    </button>
                                 </div>
 
                                 {/* Spacer - pushes right side to the end */}
@@ -831,6 +927,21 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                     )}
 
                                     <div className="w-px h-6 bg-border"></div>
+
+                                    {/* Global Header Toggle - Far Right */}
+                                    <button
+                                        onClick={onToggleGlobalHeader}
+                                        className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all"
+                                        title={showGlobalHeader ? "Hide Header" : "Show Header"}
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            {showGlobalHeader ? (
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                            ) : (
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            )}
+                                        </svg>
+                                    </button>
 
                                     {/* PDF Export */}
                                     {currentNoteId && (
@@ -905,10 +1016,16 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                         </svg>
                                     </button>
 
+
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    </div>
+                )}
 
+                {/* Scrollable Content Area */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                    <div className="max-w-4xl mx-auto">
                         {/* Show toolbar button when hidden */}
                         {!isToolbarVisible && (
                             <div className="flex justify-center mb-3">
@@ -921,12 +1038,12 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                             </div>
                         )}
 
-                        {/* Rich Text Editor */}
+                        {/* Rich Text Editor - Fixed height with internal scrolling */}
                         <div
                             ref={editorRef}
                             contentEditable={!isLocked}
                             dir="ltr"
-                            className={`w-full min-h-[400px] max-h-[600px] overflow-y-auto p-6 outline-none border border-border rounded-lg text-base leading-relaxed ${isLocked ? 'bg-muted/30 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-primary/20'
+                            className={`w-full h-[calc(100vh-350px)] sm:h-[500px] overflow-y-auto p-6 outline-none border border-border rounded-lg text-base leading-relaxed ${isLocked ? 'bg-muted/30 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-primary/20'
                                 }`}
                             onInput={handleInput}
                             onMouseUp={() => { }}
