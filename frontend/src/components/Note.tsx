@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { saveNotesToDrive, loadNotesFromDrive, NoteItem } from '../services/notesService'
 import { initializeGoogleAPI } from '../services/googleDrive'
-import { exportNoteToPDF } from '../services/pdfService'
 import Modal from './Modal'
 import ConfirmDialog from './ConfirmDialog'
 import { useAppData } from '../contexts/AppDataContext'
@@ -11,16 +10,16 @@ import { useAppData } from '../contexts/AppDataContext'
 interface NoteProps {
     showGlobalHeader: boolean
     onToggleGlobalHeader: () => void
+    onBack: () => void
 }
 
-export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NoteProps) {
+export default function Note({ showGlobalHeader, onToggleGlobalHeader, onBack }: NoteProps) {
     const { notes: contextNotes, setNotes: setContextNotes } = useAppData()
     const [notes, setNotes] = useState<NoteItem[]>(contextNotes)
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null)
     const [isSidebarOpen, setIsSidebarOpen] = useState(true)
     const [isDeleteMode, setIsDeleteMode] = useState(false)
     const [selectedNotes, setSelectedNotes] = useState<number[]>([])
-    const [isToolbarVisible, setIsToolbarVisible] = useState(true)
     const [isLocked, setIsLocked] = useState(false)
     const [history, setHistory] = useState<string[]>([])
     const [historyIndex, setHistoryIndex] = useState(-1)
@@ -28,18 +27,12 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     const [editingTitle, setEditingTitle] = useState('')
     const [isSyncing, setIsSyncing] = useState(false)
     const [syncError, setSyncError] = useState<string | null>(null)
-    const [isExportingPDF, setIsExportingPDF] = useState(false)
     const [showNewNoteModal, setShowNewNoteModal] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-    const [showClearConfirm, setShowClearConfirm] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
-    const [hasSelection, setHasSelection] = useState(false)
-    const [selectedFont, setSelectedFont] = useState('Arial')
-    const [selectedSize, setSelectedSize] = useState('16')
-    const [showHeadingMenu, setShowHeadingMenu] = useState(false)
-    const [showColorPicker, setShowColorPicker] = useState(false)
-    const [showBgColorPicker, setShowBgColorPicker] = useState(false)
+    const [currentTitle, setCurrentTitle] = useState('')
     const editorRef = useRef<HTMLDivElement>(null)
+    const titleRef = useRef<HTMLHeadingElement>(null)
     const saveTimeoutRef = useRef<number | null>(null)
 
     // Use preloaded notes from context
@@ -51,6 +44,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
             if (!currentNoteId) {
                 const firstNote = contextNotes[0]
                 setCurrentNoteId(firstNote.id)
+                setCurrentTitle(firstNote.title)
                 if (editorRef.current) {
                     editorRef.current.innerHTML = firstNote.content
                 }
@@ -85,6 +79,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                     if (localNotes.length > 0 && !currentNoteId) {
                         const firstNote = localNotes[0]
                         setCurrentNoteId(firstNote.id)
+                        setCurrentTitle(firstNote.title)
                         if (editorRef.current) {
                             editorRef.current.innerHTML = firstNote.content
                         }
@@ -116,6 +111,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                     if (!currentNoteId && driveNotes.length > 0) {
                         const firstNote = driveNotes[0]
                         setCurrentNoteId(firstNote.id)
+                        setCurrentTitle(firstNote.title)
                         if (editorRef.current) {
                             editorRef.current.innerHTML = firstNote.content
                         }
@@ -196,117 +192,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []) // Empty dependency - only run on mount/unmount
 
-    const handleExportPDF = async () => {
-        if (!currentNoteId) return
-
-        const currentNote = notes.find(n => n.id === currentNoteId)
-        if (!currentNote) return
-
-        setIsExportingPDF(true)
-        try {
-            await exportNoteToPDF(currentNote)
-        } catch (error) {
-            console.error('Error exporting PDF:', error)
-            setSyncError('Failed to export PDF')
-        } finally {
-            setIsExportingPDF(false)
-        }
-    }
-
-    // Track text selection for formatting toolbar
-    useEffect(() => {
-        const handleSelectionChange = () => {
-            const selection = window.getSelection()
-            if (editorRef.current?.contains(selection?.anchorNode || null)) {
-                setHasSelection(!!selection && selection.toString().length > 0)
-            } else {
-                setHasSelection(false)
-            }
-        }
-
-        document.addEventListener('selectionchange', handleSelectionChange)
-        return () => {
-            document.removeEventListener('selectionchange', handleSelectionChange)
-        }
-    }, [])
-
-    // Rich text formatting functions - Apply only to selected text
-    const applyFormat = (command: string, value?: string) => {
-        document.execCommand(command, false, value)
-        editorRef.current?.focus()
-    }
-
-    const applyFontFamily = (font: string) => {
-        if (!hasSelection) return
-        setSelectedFont(font)
-        applyFormat('fontName', font)
-    }
-
-    const applyFontSize = (size: string) => {
-        if (!hasSelection) return
-        setSelectedSize(size)
-        // Wrap selection in span with font size
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0)
-            const span = document.createElement('span')
-            span.style.fontSize = `${size}px`
-            try {
-                range.surroundContents(span)
-            } catch (e) {
-                // If surrounding fails, use execCommand
-                applyFormat('fontSize', '7') // Large
-                // Then apply custom size
-                const sel = window.getSelection()
-                if (sel && sel.anchorNode && sel.anchorNode.parentElement) {
-                    sel.anchorNode.parentElement.style.fontSize = `${size}px`
-                }
-            }
-        }
-    }
-
-    const applyHeading = (level: 'h1' | 'h2' | 'h3') => {
-        if (!hasSelection) return
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0)
-            const span = document.createElement('span')
-            span.style.fontWeight = 'bold'
-
-            // Apply appropriate font size for heading level
-            switch (level) {
-                case 'h1':
-                    span.style.fontSize = '32px'
-                    break
-                case 'h2':
-                    span.style.fontSize = '24px'
-                    break
-                case 'h3':
-                    span.style.fontSize = '20px'
-                    break
-            }
-
-            try {
-                range.surroundContents(span)
-            } catch (e) {
-                // Fallback: apply bold and larger font
-                applyFormat('bold')
-                applyFontSize(level === 'h1' ? '32' : level === 'h2' ? '24' : '20')
-            }
-        }
-        setShowHeadingMenu(false)
-    }
-
-    const applyColor = (color: string) => {
-        applyFormat('foreColor', color)
-        setShowColorPicker(false)
-    }
-
-    const applyBackgroundColor = (color: string) => {
-        applyFormat('backColor', color)
-        setShowBgColorPicker(false)
-    }
-
     const toggleSidebar = () => {
         // If opening sidebar and has current note, force sync before showing list
         if (!isSidebarOpen && currentNoteId && editorRef.current) {
@@ -346,6 +231,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
             }
 
             setCurrentNoteId(note.id)
+            setCurrentTitle(note.title)
             if (editorRef.current) {
                 editorRef.current.innerHTML = note.content
             }
@@ -374,6 +260,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         const updatedNotes = [newNote, ...notes]
         setNotes(updatedNotes)
         setCurrentNoteId(newNote.id)
+        setCurrentTitle(newNote.title)
         setIsSidebarOpen(false)
         if (editorRef.current) {
             editorRef.current.innerHTML = ''
@@ -386,8 +273,9 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         if (currentNoteId && editorRef.current) {
             // Save innerHTML to preserve formatting
             const content = editorRef.current.innerHTML || ''
+            const title = currentTitle || 'Untitled'
             const updatedNotes = notes.map(note =>
-                note.id === currentNoteId ? { ...note, content } : note
+                note.id === currentNoteId ? { ...note, content, title } : note
             )
             setNotes(updatedNotes)
             syncNotes(updatedNotes)
@@ -403,7 +291,9 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         saveCurrentNote()
     }
 
-    const handleContentChange = () => {
+    const handleTitleChange = (e: React.FormEvent<HTMLHeadingElement>) => {
+        const newTitle = e.currentTarget.textContent || ''
+        setCurrentTitle(newTitle)
         saveCurrentNote()
     }
 
@@ -431,6 +321,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         setIsDeleteMode(false)
         if (currentNoteId && selectedNotes.includes(currentNoteId)) {
             setCurrentNoteId(null)
+            setCurrentTitle('')
             if (editorRef.current) {
                 editorRef.current.innerHTML = ''
             }
@@ -461,8 +352,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         setEditingTitle('')
     }
 
-
-
     const toggleLock = () => setIsLocked(!isLocked)
 
     const undo = () => {
@@ -483,16 +372,17 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
         }
     }
 
-    const handleClear = () => {
-        setShowClearConfirm(true)
+    // Manual save to Drive
+    const handleManualSave = async () => {
+        if (currentNoteId && editorRef.current) {
+            saveCurrentNote()
+            await forceSyncNotes(notes)
+        }
     }
 
-    const confirmClear = () => {
-        if (editorRef.current && !isLocked) {
-            editorRef.current.innerHTML = ''
-            handleContentChange()
-        }
-        setShowClearConfirm(false)
+    // Manual save handler for toolbar button
+    const handleManualSaveToolbar = () => {
+        forceSyncNotes(notes)
     }
 
     // Filter notes by search query
@@ -502,23 +392,23 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
     )
 
     return (
-        <div className="flex h-screen bg-background overflow-hidden max-w-full">
+        <div className="flex h-screen bg-white overflow-hidden max-w-full">
             {/* Sidebar - Full screen on mobile, side panel on desktop */}
             <div
-                className={`fixed inset-0 sm:left-0 sm:top-16 sm:bottom-0 sm:w-80 sm:max-w-full bg-white border-r border-border shadow-lg transition-transform duration-300 z-50 sm:z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                className={`fixed inset-0 sm:left-0 sm:top-16 sm:bottom-0 sm:w-80 sm:max-w-full bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 sm:z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
             >
                 <div className="flex flex-col h-full">
                     {/* Sidebar Header */}
-                    <div className="p-4 border-b border-border">
+                    <div className="p-4 border-b border-gray-200">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-bold text-foreground">My Notes</h2>
+                            <h2 className="text-lg font-bold text-gray-800">My Notes</h2>
                             <div className="flex gap-2">
                                 <button
                                     onClick={toggleDeleteMode}
                                     className={`tap-target p-2 rounded-lg transition-colors ${isDeleteMode
-                                        ? 'bg-destructive text-white'
-                                        : 'bg-muted text-foreground hover:bg-secondary'
+                                        ? 'bg-red-500 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                         }`}
                                     title="Delete mode"
                                 >
@@ -528,7 +418,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 </button>
                                 <button
                                     onClick={createNewNote}
-                                    className="tap-target p-2 rounded-lg bg-primary text-white hover:opacity-90 transition-opacity"
+                                    className="tap-target p-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700 transition-opacity"
                                     title="New note"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -538,7 +428,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 {/* Back arrow - visible on mobile only */}
                                 <button
                                     onClick={toggleSidebar}
-                                    className="sm:hidden tap-target p-2 rounded-lg bg-muted text-foreground hover:bg-secondary transition-colors"
+                                    className="sm:hidden tap-target p-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                                     title="Close sidebar"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -551,7 +441,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                         {/* Search Bar */}
                         <div className="relative mb-4">
                             <svg
-                                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40"
+                                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -563,14 +453,14 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                 placeholder="Search notes..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg text-foreground placeholder-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all text-sm"
+                                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent transition-all text-sm"
                             />
                         </div>
 
                         {isDeleteMode && selectedNotes.length > 0 && (
                             <button
                                 onClick={deleteSelectedNotes}
-                                className="w-full py-2 px-4 bg-destructive text-white rounded-lg hover:opacity-90 transition-opacity font-medium"
+                                className="w-full py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-opacity font-medium"
                             >
                                 Delete {selectedNotes.length} note{selectedNotes.length > 1 ? 's' : ''}
                             </button>
@@ -580,8 +470,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                     {/* Notes List */}
                     <div className="flex-1 overflow-y-auto">
                         {filteredNotes.length === 0 && searchQuery && (
-                            <div className="text-center py-8 text-foreground/60">
-                                <svg className="w-12 h-12 mx-auto mb-2 text-foreground/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="text-center py-8 text-gray-500">
+                                <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
                                 <p className="text-sm">No notes found</p>
@@ -594,8 +484,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                     e.preventDefault()
                                     selectNote(note)
                                 }}
-                                className={`relative w-full text-left p-4 border-b border-border hover:bg-secondary transition-colors cursor-pointer ${currentNoteId === note.id && !isDeleteMode ? 'bg-secondary' : ''
-                                    } ${selectedNotes.includes(note.id) ? 'bg-destructive/10' : ''}`}
+                                className={`relative w-full text-left p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer ${currentNoteId === note.id && !isDeleteMode ? 'bg-gray-50' : ''
+                                    } ${selectedNotes.includes(note.id) ? 'bg-red-50' : ''}`}
                             >
                                 <div className="flex items-start gap-3">
                                     {/* Checkbox for delete mode */}
@@ -603,8 +493,8 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                         <div className="flex-shrink-0 mt-1">
                                             <div
                                                 className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${selectedNotes.includes(note.id)
-                                                    ? 'bg-destructive border-destructive'
-                                                    : 'border-border'
+                                                    ? 'bg-red-500 border-red-500'
+                                                    : 'border-gray-300'
                                                     }`}
                                             >
                                                 {selectedNotes.includes(note.id) && (
@@ -629,35 +519,35 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                                         if (e.key === 'Enter') saveTitle()
                                                         if (e.key === 'Escape') cancelEditTitle()
                                                     }}
-                                                    className="w-full px-2 py-1 border border-primary rounded focus:outline-none focus:ring-2 focus:ring-primary font-semibold text-foreground"
+                                                    className="w-full px-2 py-1 border border-gray-800 rounded focus:outline-none focus:ring-2 focus:ring-gray-800 font-semibold text-gray-800"
                                                     autoFocus
                                                 />
                                             </div>
                                         ) : (
                                             <div className="flex items-center gap-2 mb-1">
                                                 {note.isPinned && (
-                                                    <svg className="w-4 h-4 text-primary flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-4 h-4 text-gray-800 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                                                         <path d="M16 12V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                                                     </svg>
                                                 )}
-                                                <h3 className={`text-foreground truncate flex-1 ${currentNoteId === note.id ? 'font-bold' : 'font-semibold'}`}>
+                                                <h3 className={`text-gray-800 truncate flex-1 ${currentNoteId === note.id ? 'font-bold' : 'font-semibold'}`}>
                                                     {note.title}
                                                 </h3>
                                                 {!isDeleteMode && (
                                                     <button
                                                         onClick={(e) => startEditingTitle(note, e)}
-                                                        className="flex-shrink-0 p-1 rounded hover:bg-primary/10 transition-colors"
+                                                        className="flex-shrink-0 p-1 rounded hover:bg-gray-200 transition-colors"
                                                         title="Edit title"
                                                     >
-                                                        <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                         </svg>
                                                     </button>
                                                 )}
                                             </div>
                                         )}
-                                        <p className="text-sm text-foreground/60 line-clamp-2 mb-2" dangerouslySetInnerHTML={{ __html: note.content.replace(/<[^>]*>/g, '') }}></p>
-                                        <p className="text-xs text-foreground/40">
+                                        <p className="text-sm text-gray-500 line-clamp-2 mb-2" dangerouslySetInnerHTML={{ __html: note.content.replace(/<[^>]*>/g, '') }}></p>
+                                        <p className="text-xs text-gray-400">
                                             {note.createdAt.toLocaleDateString()}
                                         </p>
                                     </div>
@@ -669,7 +559,7 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                                                 e.stopPropagation()
                                                 togglePin(note.id)
                                             }}
-                                            className={`flex-shrink-0 p-1.5 rounded hover:bg-secondary/50 transition-colors ${note.isPinned ? 'text-primary' : 'text-foreground/40'
+                                            className={`flex-shrink-0 p-1.5 rounded hover:bg-gray-200 transition-colors ${note.isPinned ? 'text-gray-800' : 'text-gray-400'
                                                 }`}
                                             title={note.isPinned ? 'Unpin note' : 'Pin note'}
                                         >
@@ -685,16 +575,16 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
                         {/* Empty State */}
                         {filteredNotes.length === 0 && (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <svg className="w-16 h-16 text-foreground/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-16 h-16 text-gray-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
-                                <p className="text-foreground/60 mb-4">
+                                <p className="text-gray-500 mb-4">
                                     {searchQuery ? 'No notes found' : 'No notes yet'}
                                 </p>
                                 {!searchQuery && (
                                     <button
                                         onClick={createNewNote}
-                                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                        className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors"
                                     >
                                         Create your first note
                                     </button>
@@ -707,403 +597,160 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader }: NotePro
 
             {/* Main Content */}
             <div className={`flex flex-col transition-all duration-300 ${isSidebarOpen ? 'sm:ml-80' : 'ml-0'} max-w-full overflow-hidden h-screen`}>
-                {/* Top Toolbar - Sticky at top, doesn't scroll */}
-                {/* Hide on mobile when sidebar is open (browsing notes), show when sidebar closed (editing) */}
-                {isToolbarVisible && (!isSidebarOpen || window.innerWidth >= 640) && (
-                    <div className="sticky top-0 z-40 bg-background border-b border-border px-4 sm:px-6 py-3">
-                        <div className="max-w-4xl mx-auto">
-                            <div className="flex items-center gap-4 flex-wrap">
-                                {/* Group 1: Sidebar Toggle */}
-                                <button
-                                    onClick={toggleSidebar}
-                                    className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all"
-                                    title={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        {isSidebarOpen ? (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                        ) : (
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        )}
-                                    </svg>
-                                </button>
+                {/* Editor Header */}
+                <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+                    {/* Left: Global Menu (☰) */}
+                    <button
+                        onClick={onBack}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Menu"
+                    >
+                        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
 
-                                <div className="w-px h-8 bg-border"></div>
+                    {/* Center: Action buttons */}
+                    <div className="flex items-center gap-1">
+                        {/* Undo */}
+                        <button
+                            onClick={undo}
+                            disabled={historyIndex <= 0}
+                            className="p-2 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Undo"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                            </svg>
+                        </button>
 
-                                {/* Group 2: Font Controls */}
-                                <div className="flex items-center gap-2">
-                                    <select
-                                        value={selectedFont}
-                                        onChange={(e) => applyFontFamily(e.target.value)}
-                                        disabled={!hasSelection}
-                                        className="px-3 py-1.5 text-sm border border-border rounded-lg bg-white hover:bg-secondary transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <option value="Arial">Arial</option>
-                                        <option value="Times New Roman">Times New Roman</option>
-                                        <option value="Courier New">Courier New</option>
-                                        <option value="Georgia">Georgia</option>
-                                        <option value="Verdana">Verdana</option>
-                                    </select>
+                        {/* Redo */}
+                        <button
+                            onClick={redo}
+                            disabled={historyIndex >= history.length - 1}
+                            className="p-2 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Redo"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6-6m6 6l-6 6" />
+                            </svg>
+                        </button>
 
-                                    <select
-                                        value={selectedSize}
-                                        onChange={(e) => applyFontSize(e.target.value)}
-                                        disabled={!hasSelection}
-                                        className="px-3 py-1.5 text-sm border border-border rounded-lg bg-white hover:bg-secondary transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <option value="12">12</option>
-                                        <option value="14">14</option>
-                                        <option value="16">16</option>
-                                        <option value="18">18</option>
-                                        <option value="20">20</option>
-                                        <option value="24">24</option>
-                                        <option value="32">32</option>
-                                    </select>
-                                </div>
+                        {/* Sync to Drive */}
+                        <button
+                            onClick={handleManualSave}
+                            disabled={isSyncing}
+                            className="p-2 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-all disabled:opacity-50"
+                            title="Sync to Google Drive"
+                        >
+                            <svg className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        </button>
 
-                                <div className="w-px h-8 bg-border"></div>
-
-                                {/* Group 3: Text Formatting (enabled when text selected) */}
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => applyFormat('bold')}
-                                        disabled={!hasSelection}
-                                        className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Bold (Ctrl+B)"
-                                    >
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z" />
-                                        </svg>
-                                    </button>
-
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => setShowHeadingMenu(!showHeadingMenu)}
-                                            disabled={!hasSelection}
-                                            className="px-3 py-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
-                                            title="Heading"
-                                        >
-                                            <span className="font-bold text-sm">H</span>
-                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                            </svg>
-                                        </button>
-                                        {showHeadingMenu && hasSelection && (
-                                            <>
-                                                <div className="fixed inset-0 z-40" onClick={() => setShowHeadingMenu(false)} />
-                                                <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
-                                                    <button onClick={() => applyHeading('h1')} className="w-full px-4 py-2 text-left hover:bg-secondary text-2xl font-bold transition-colors">
-                                                        H1
-                                                    </button>
-                                                    <button onClick={() => applyHeading('h2')} className="w-full px-4 py-2 text-left hover:bg-secondary text-xl font-bold transition-colors">
-                                                        H2
-                                                    </button>
-                                                    <button onClick={() => applyHeading('h3')} className="w-full px-4 py-2 text-left hover:bg-secondary text-lg font-bold transition-colors">
-                                                        H3
-                                                    </button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Text Color Picker */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => setShowColorPicker(!showColorPicker)}
-                                            disabled={!hasSelection}
-                                            className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                            title="Text Color"
-                                        >
-                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                                <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
-                                            </svg>
-                                        </button>
-                                        {showColorPicker && hasSelection && (
-                                            <>
-                                                <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
-                                                <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-lg shadow-xl z-50 p-3">
-                                                    <div className="flex flex-col gap-2">
-                                                        <label className="text-xs font-medium text-foreground/70">Text Color</label>
-                                                        <input
-                                                            type="color"
-                                                            onChange={(e) => applyColor(e.target.value)}
-                                                            className="w-32 h-10 rounded cursor-pointer"
-                                                            defaultValue="#000000"
-                                                        />
-                                                        <div className="grid grid-cols-5 gap-1">
-                                                            {['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080', '#008000'].map(color => (
-                                                                <button
-                                                                    key={color}
-                                                                    onClick={() => applyColor(color)}
-                                                                    className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
-                                                                    style={{ backgroundColor: color }}
-                                                                    title={color}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Background Color Picker */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => setShowBgColorPicker(!showBgColorPicker)}
-                                            disabled={!hasSelection}
-                                            className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                            title="Highlight Color"
-                                        >
-                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                                <path d="M16.56 8.94L7.62 0 6.21 1.41l2.38 2.38-5.15 5.15c-.59.59-.59 1.54 0 2.12l5.5 5.5c.29.29.68.44 1.06.44s.77-.15 1.06-.44l5.5-5.5c.59-.58.59-1.53 0-2.12zM5.21 10L10 5.21 14.79 10H5.21zM19 11.5s-2 2.17-2 3.5c0 1.1.9 2 2 2s2-.9 2-2c0-1.33-2-3.5-2-3.5z" />
-                                            </svg>
-                                        </button>
-                                        {showBgColorPicker && hasSelection && (
-                                            <>
-                                                <div className="fixed inset-0 z-40" onClick={() => setShowBgColorPicker(false)} />
-                                                <div className="absolute left-0 top-full mt-1 bg-white border border-border rounded-lg shadow-xl z-50 p-3">
-                                                    <div className="flex flex-col gap-2">
-                                                        <label className="text-xs font-medium text-foreground/70">Highlight Color</label>
-                                                        <input
-                                                            type="color"
-                                                            onChange={(e) => applyBackgroundColor(e.target.value)}
-                                                            className="w-32 h-10 rounded cursor-pointer"
-                                                            defaultValue="#FFFF00"
-                                                        />
-                                                        <div className="grid grid-cols-5 gap-1">
-                                                            {['#FFFF00', '#00FFFF', '#FF00FF', '#FFA500', '#90EE90', '#FFB6C1', '#DDA0DD', '#F0E68C', '#E0FFFF', '#FFE4B5'].map(color => (
-                                                                <button
-                                                                    key={color}
-                                                                    onClick={() => applyBackgroundColor(color)}
-                                                                    className="w-6 h-6 rounded border border-gray-300 hover:scale-110 transition-transform"
-                                                                    style={{ backgroundColor: color }}
-                                                                    title={color}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Underline button */}
-                                    <button
-                                        onClick={() => applyFormat('underline')}
-                                        disabled={!hasSelection}
-                                        className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Underline (Ctrl+U)"
-                                    >
-                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z" />
-                                        </svg>
-                                    </button>
-                                </div>
-
-                                {/* Spacer - pushes right side to the end */}
-                                <div className="flex-1"></div>
-
-                                {/* Group 4: Utility Buttons (Far Right) */}
-                                <div className="flex items-center gap-2">
-                                    {/* Current note info */}
-                                    {currentNoteId && (
-                                        <div className="flex items-center gap-2 px-3 py-1 bg-secondary/50 rounded-lg">
-                                            {isSyncing ? (
-                                                <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                                            ) : syncError ? (
-                                                <svg className="w-4 h-4 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                            ) : (
-                                                <svg className="w-3 h-3 text-primary" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                </svg>
-                                            )}
-                                            <span className="text-xs font-medium text-foreground/70 truncate max-w-[150px]">
-                                                {notes.find(n => n.id === currentNoteId)?.title || 'Untitled'}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div className="w-px h-6 bg-border"></div>
-
-                                    {/* Global Header Toggle - Far Right */}
-                                    <button
-                                        onClick={onToggleGlobalHeader}
-                                        className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all"
-                                        title={showGlobalHeader ? "Hide Header" : "Show Header"}
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            {showGlobalHeader ? (
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                                            ) : (
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                            )}
-                                        </svg>
-                                    </button>
-
-                                    {/* PDF Export */}
-                                    {currentNoteId && (
-                                        <button
-                                            onClick={handleExportPDF}
-                                            disabled={isExportingPDF}
-                                            className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
-                                            title="Export as PDF"
-                                        >
-                                            {isExportingPDF ? (
-                                                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                                            ) : (
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                            )}
-                                        </button>
-                                    )}
-
-                                    {/* Lock */}
-                                    <button
-                                        onClick={toggleLock}
-                                        className={`p-2 rounded-lg transition-all ${isLocked
-                                            ? 'bg-warning/20 text-warning'
-                                            : 'text-foreground/60 hover:text-foreground hover:bg-secondary'
-                                            }`}
-                                        title={isLocked ? 'Unlock' : 'Lock (Read-only)'}
-                                    >
-                                        {isLocked ? (
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                            </svg>
-                                        ) : (
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                                            </svg>
-                                        )}
-                                    </button>
-
-                                    <div className="w-px h-6 bg-border"></div>
-
-                                    {/* Undo/Redo */}
-                                    <button
-                                        onClick={undo}
-                                        disabled={historyIndex <= 0 || isLocked}
-                                        className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Undo"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={redo}
-                                        disabled={historyIndex >= history.length - 1 || isLocked}
-                                        className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-secondary transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Redo"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
-                                        </svg>
-                                    </button>
-
-                                    <button
-                                        onClick={handleClear}
-                                        disabled={isLocked}
-                                        className="p-2 rounded-lg text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                                        title="Clear"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-
-
-                                </div>
-                            </div>
-                        </div>
+                        {/* Lock/Unlock */}
+                        <button
+                            onClick={() => setIsLocked(!isLocked)}
+                            className={`p-2 rounded-lg transition-all ${isLocked ? 'text-gray-800 bg-gray-100' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}
+                            title={isLocked ? "Unlock editing" : "Lock editing"}
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                {isLocked ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                )}
+                            </svg>
+                        </button>
                     </div>
-                )}
 
-                {/* Scrollable Content Area */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                    <div className="max-w-4xl mx-auto">
-                        {/* Show toolbar button when hidden */}
-                        {!isToolbarVisible && (
-                            <div className="flex justify-center mb-3">
-                                <button
-                                    onClick={() => setIsToolbarVisible(true)}
-                                    className="tap-target px-4 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary/80 transition-colors"
-                                >
-                                    Show Toolbar
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Rich Text Editor - Fixed height with internal scrolling */}
-                        <div
-                            ref={editorRef}
-                            contentEditable={!isLocked}
-                            dir="ltr"
-                            className={`w-full h-[calc(100vh-350px)] sm:h-[500px] overflow-y-auto p-6 outline-none border border-border rounded-lg text-base leading-relaxed ${isLocked ? 'bg-muted/30 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-primary/20'
-                                }`}
-                            onInput={handleInput}
-                            onMouseUp={() => { }}
-                            onKeyUp={() => { }}
-                            onTouchEnd={() => { }}
-                            suppressContentEditableWarning={true}
-                            spellCheck={true}
-                            autoCorrect="on"
-                            autoCapitalize="on"
-                            data-gramm="false"
-                            data-gramm_editor="false"
-                            data-enable-grammarly="false"
-                        />
-
-                        {/* CSS for placeholder effect */}
-                        <style>{`
-                            [contentEditable="true"]:empty:before {
-                                content: attr(data-placeholder);
-                                color: #9CA3AF;
-                                cursor: text;
-                            }
-                        `}</style>
-                    </div>
+                    {/* Right: Notes Sidebar Toggle - Pushed to far right */}
+                    <button
+                        onClick={toggleSidebar}
+                        className="ml-auto p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        title={isSidebarOpen ? "Close notes" : "Open notes"}
+                    >
+                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isSidebarOpen ? "M15 19l-7-7 7-7" : "M9 5l7 7-7 7"} />
+                        </svg>
+                    </button>
                 </div>
-            </div>
 
-            {/* New Note Modal */}
-            <Modal
+                {/* Editor Area - Medium style */}
+                <div className="flex-1 overflow-y-auto bg-white">
+                    {currentNoteId ? (
+                        <div className="max-w-[680px] mx-auto px-6 py-12">
+                            {/* Title */}
+                            <h1
+                                ref={titleRef}
+                                contentEditable={!isLocked}
+                                onInput={handleTitleChange}
+                                suppressContentEditableWarning
+                                className="text-4xl sm:text-5xl font-bold text-gray-900 mb-8 outline-none focus:outline-none"
+                                style={{
+                                    fontFamily: 'Georgia, serif',
+                                    lineHeight: '1.2',
+                                    letterSpacing: '-0.02em'
+                                }}
+                            >
+                                {currentTitle || 'Untitled'}
+                            </h1>
+
+                            {/* Content */}
+                            <div
+                                ref={editorRef}
+                                contentEditable={!isLocked}
+                                onInput={handleInput}
+                                className="text-xl text-gray-800 outline-none focus:outline-none min-h-[400px]"
+                                style={{
+                                    fontFamily: 'Georgia, serif',
+                                    lineHeight: '1.58',
+                                    letterSpacing: '-0.003em'
+                                }}
+                                suppressContentEditableWarning
+                            />
+                        </div>
+                    ) : (
+                        <div className="max-w-[680px] mx-auto px-6 py-12 text-center">
+                            <svg className="w-24 h-24 mx-auto mb-6 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-2">Select a note to start writing</h2>
+                            <p className="text-gray-500 mb-6">Or create a new one to begin</p>
+                            <button
+                                onClick={createNewNote}
+                                className="px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                            >
+                                Create Note
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div >
+
+            {/* Modals */}
+            < Modal
                 isOpen={showNewNoteModal}
-                onClose={() => setShowNewNoteModal(false)}
-                onConfirm={handleCreateNote}
+                onClose={() => setShowNewNoteModal(false)
+                }
+                onConfirm={(title) => {
+                    if (title.trim()) {
+                        handleCreateNote(title.trim())
+                    }
+                }}
                 title="Create New Note"
                 placeholder="Enter note title..."
                 confirmText="Create"
                 cancelText="Cancel"
             />
 
-            {/* Delete Confirmation Dialog */}
             <ConfirmDialog
                 isOpen={showDeleteConfirm}
                 onClose={() => setShowDeleteConfirm(false)}
                 onConfirm={confirmDelete}
                 title="Delete Notes"
                 message={`Are you sure you want to delete ${selectedNotes.length} note${selectedNotes.length > 1 ? 's' : ''}? This action cannot be undone.`}
-                confirmText="Delete"
-                cancelText="Cancel"
-                isDangerous={true}
             />
-
-            {/* Clear Confirmation Dialog */}
-            <ConfirmDialog
-                isOpen={showClearConfirm}
-                onClose={() => setShowClearConfirm(false)}
-                onConfirm={confirmClear}
-                title="Clear Note Content"
-                message="Are you sure you want to clear all content from this note? This action cannot be undone."
-                confirmText="Clear"
-                cancelText="Cancel"
-                isDangerous={true}
-            />
-        </div>
+        </div >
     )
 }
