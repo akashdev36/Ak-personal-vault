@@ -45,8 +45,8 @@ function App() {
     return (
         <AppDataProvider isAuthenticated={authenticated}>
             <div className="min-h-screen bg-background">
-                {/* Show header on home or when toggled on in note page */}
-                {(currentPage !== 'note' || showHeaderInNote) && (
+                {/* Show header on all pages except note page */}
+                {currentPage !== 'note' && (
                     <Header
                         onPageChange={setCurrentPage}
                         currentPage={currentPage}

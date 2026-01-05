@@ -114,14 +114,6 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
         return Math.max(max, streaks.current)
     }, 0)
 
-    function calculateCompletionRate(habitId: string): number {
-        const habit = habits.find(h => h.id === habitId)
-        if (!habit) return 0
-        const daysSince = Math.floor((new Date().getTime() - habit.createdAt.getTime()) / (1000 * 60 * 60 * 24)) + 1
-        const completions = entries.filter(e => e.habitId === habitId && e.completed).length
-        return Math.round((completions / daysSince) * 100)
-    }
-
     // Greeting based on time
     const hour = currentTime.getHours()
     const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening'
