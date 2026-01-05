@@ -8,12 +8,10 @@ import { useAppData } from '../contexts/AppDataContext'
 
 
 interface NoteProps {
-    showGlobalHeader: boolean
-    onToggleGlobalHeader: () => void
     onBack: () => void
 }
 
-export default function Note({ showGlobalHeader, onToggleGlobalHeader, onBack }: NoteProps) {
+export default function Note({ onBack }: NoteProps) {
     const { notes: contextNotes, setNotes: setContextNotes } = useAppData()
     const [notes, setNotes] = useState<NoteItem[]>(contextNotes)
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null)
@@ -26,7 +24,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader, onBack }:
     const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
     const [editingTitle, setEditingTitle] = useState('')
     const [isSyncing, setIsSyncing] = useState(false)
-    const [syncError, setSyncError] = useState<string | null>(null)
     const [showNewNoteModal, setShowNewNoteModal] = useState(false)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
@@ -352,8 +349,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader, onBack }:
         setEditingTitle('')
     }
 
-    const toggleLock = () => setIsLocked(!isLocked)
-
     const undo = () => {
         if (historyIndex > 0 && editorRef.current) {
             const newIndex = historyIndex - 1
@@ -378,11 +373,6 @@ export default function Note({ showGlobalHeader, onToggleGlobalHeader, onBack }:
             saveCurrentNote()
             await forceSyncNotes(notes)
         }
-    }
-
-    // Manual save handler for toolbar button
-    const handleManualSaveToolbar = () => {
-        forceSyncNotes(notes)
     }
 
     // Filter notes by search query

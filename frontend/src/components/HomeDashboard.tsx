@@ -108,15 +108,6 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
     const todayPercentage = habits.length > 0 ? Math.round((completedToday / habits.length) * 100) : 0
 
     const last7Days = Array.from({ length: 7 }, (_, i) => getDateDaysAgo(6 - i))
-    const thisWeekCompleted = last7Days.reduce((sum, date) =>
-        sum + habits.filter(h => isHabitCompleted(h.id, date)).length, 0
-    )
-
-    const bestHabit = habits.length > 0 ? habits.reduce((best, current) => {
-        const currentRate = calculateCompletionRate(current.id)
-        const bestRate = calculateCompletionRate(best.id)
-        return currentRate > bestRate ? current : best
-    }, habits[0]) : null
 
     const longestStreak = habits.reduce((max, habit) => {
         const streaks = calculateStreaks(habit.id, entries)

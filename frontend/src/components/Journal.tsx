@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { JournalEntry, loadJournalFromDrive, saveJournalToDrive } from '../services/journalService'
+import { JournalEntry, loadJournalFromDrive } from '../services/journalService'
 
 interface JournalProps {
     onBack: () => void
@@ -7,7 +7,6 @@ interface JournalProps {
 
 export default function Journal({ onBack }: JournalProps) {
     const [entries, setEntries] = useState<JournalEntry[]>([])
-    const [entriesMap, setEntriesMap] = useState<Record<string, JournalEntry>>({})
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedMood, setSelectedMood] = useState<string | null>(null)
@@ -28,7 +27,6 @@ export default function Journal({ onBack }: JournalProps) {
         try {
             setLoading(true)
             const entriesData = await loadJournalFromDrive()
-            setEntriesMap(entriesData)
             const sortedEntries = Object.values(entriesData)
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
             setEntries(sortedEntries)

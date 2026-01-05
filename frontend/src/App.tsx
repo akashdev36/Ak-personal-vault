@@ -11,7 +11,6 @@ import { AppDataProvider } from './contexts/AppDataContext'
 
 function App() {
     const [currentPage, setCurrentPage] = useState('home')
-    const [showHeaderInNote, setShowHeaderInNote] = useState(false)
     const [authenticated, setAuthenticated] = useState(false)
     const [loading, setLoading] = useState(true)
 
@@ -60,11 +59,7 @@ function App() {
                 )}
 
                 {currentPage === 'note' && (
-                    <Note
-                        showGlobalHeader={showHeaderInNote}
-                        onToggleGlobalHeader={() => setShowHeaderInNote(!showHeaderInNote)}
-                        onBack={() => setCurrentPage('home')}
-                    />
+                    <Note onBack={() => setCurrentPage('home')} />
                 )}
 
                 {currentPage === 'habits' && (

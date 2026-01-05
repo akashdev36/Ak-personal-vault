@@ -347,7 +347,7 @@ export default function Habits() {
 
                                     {/* 30-Day Calendar Grid */}
                                     <div className="grid grid-cols-10 gap-1.5">
-                                        {days.map((date, index) => {
+                                        {days.map((date, _index) => {
                                             const isCompleted = isHabitCompleted(habit.id, date)
                                             const isToday = date === getTodayDate()
 
@@ -673,7 +673,7 @@ export default function Habits() {
                                             <div className="pt-4 border-t border-gray-100">
                                                 <div className="text-sm font-semibold text-gray-700 mb-3">Last 7 Days</div>
                                                 <div className="flex gap-2">
-                                                    {last7Days.map((date, index) => {
+                                                    {last7Days.map((date, _index) => {
                                                         const isCompleted = isHabitCompleted(habit.id, date)
                                                         const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(date).getDay()]
                                                         const isToday = date === getTodayDate()
