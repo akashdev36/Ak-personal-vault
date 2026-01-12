@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import chat, tracking, analytics
+from app.routes import chat, tracking, analytics, quotes
 import os
 from dotenv import load_dotenv
 
@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api/chat", tags=["AI Chat"])
 app.include_router(tracking.router, prefix="/api/tracking", tags=["Tracking"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(quotes.router, prefix="/api/quotes", tags=["Quotes"])
 
 @app.get("/")
 def root():

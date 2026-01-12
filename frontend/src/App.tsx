@@ -5,8 +5,9 @@ import Videos from './components/Videos'
 import Habits from './components/Habits'
 import HomeDashboard from './components/HomeDashboard'
 import Journal from './components/Journal'
+import AiChat from './components/AiChat'
 import Login from './components/Login'
-import { isAuthenticated } from './services/googleDrive'
+import { isAuthenticated, getCurrentUser } from './services/googleDrive'
 import { AppDataProvider } from './contexts/AppDataContext'
 
 function App() {
@@ -74,6 +75,13 @@ function App() {
 
                 {currentPage === 'journal' && (
                     <Journal onBack={() => setCurrentPage('home')} />
+                )}
+
+                {currentPage === 'ai-chat' && (
+                    <AiChat
+                        userEmail={getCurrentUser()?.email || 'anonymous'}
+                        onBack={() => setCurrentPage('home')}
+                    />
                 )}
             </div>
         </AppDataProvider>
