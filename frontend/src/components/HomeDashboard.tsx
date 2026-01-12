@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Habit, HabitEntry, getTodayDate, getDateDaysAgo, calculateStreaks } from '../services/habitsService'
 import { NoteItem } from '../services/notesService'
 import { saveJournalToDrive, loadJournalFromDrive } from '../services/journalService'
+import { getDailyQuote } from '../services/apiService'
 
 interface HomeDashboardProps {
     onNavigateTo: (page: string) => void
@@ -12,6 +13,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
     const [entries, setEntries] = useState<HabitEntry[]>([])
     const [notes, setNotes] = useState<NoteItem[]>([])
     const [currentTime, setCurrentTime] = useState(new Date())
+    const [dailyQuote, setDailyQuote] = useState<string>('')
 
     useEffect(() => {
         loadData()
@@ -20,8 +22,21 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
         // Load today's check-in from Drive
         loadTodaysCheckIn()
 
+        // Load daily quote from backend
+        loadDailyQuote()
+
         return () => clearInterval(timer)
     }, [])
+
+    const loadDailyQuote = async () => {
+        try {
+            const data = await getDailyQuote()
+            setDailyQuote(data.quote)
+        } catch (error) {
+            console.log('Could not load daily quote:', error)
+            setDailyQuote('Today is a new opportunity. Make it count!')
+        }
+    }
 
     const loadTodaysCheckIn = async () => {
         try {
@@ -171,6 +186,21 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                         </div>
                     </div>
 
+                    {/* Daily Motivational Quote Card - Right after clock */}
+                    {dailyQuote && (
+                        <div className="lg:col-span-3 bg-gradient-to-r from-amber-400 via-orange-400 to-pink-500 rounded-3xl p-6 shadow-xl text-white">
+                            <div className="flex items-center gap-4">
+                                <div className="text-4xl">💡</div>
+                                <div className="flex-1">
+                                    <p className="text-xs font-semibold uppercase tracking-wider opacity-80 mb-1">Today's Inspiration</p>
+                                    <p className="text-xl md:text-2xl font-bold leading-relaxed">
+                                        {dailyQuote}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* 2. Overall Progress Ring */}
                     <div className="bg-white rounded-3xl p-6 shadow-xl">
                         <h3 className="text-sm font-bold text-gray-600 mb-4">Today's Progress</h3>
@@ -311,7 +341,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                     {/* 7. Quick Actions Panel */}
                     <div className="lg:col-span-3 bg-white rounded-3xl p-6 shadow-xl">
                         <h3 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <button
                                 onClick={() => onNavigateTo('note')}
                                 className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white hover:scale-105 transition-transform shadow-lg"
@@ -361,6 +391,14 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                 </svg>
                                 <span className="font-bold">Dairy</span>
+                            </button>
+
+                            <button
+                                onClick={() => onNavigateTo('ai-chat')}
+                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white hover:scale-105 transition-transform shadow-lg"
+                            >
+                                <span className="text-3xl mb-2">🤖</span>
+                                <span className="font-bold">AI Chat</span>
                             </button>
                         </div>
                     </div>
