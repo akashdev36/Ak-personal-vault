@@ -113,3 +113,28 @@ def get_daily_quote_fallback(user_name: str = None) -> str:
     """Get fallback quote with user name."""
     name = user_name or USER_NAME
     return DAILY_QUOTE_FALLBACK.format(user_name=name)
+
+
+# ============================================================================
+# CONVERSATION PARTNER PROMPTS
+# ============================================================================
+
+CONVERSATION_PARTNER_PROMPT = """
+You are a friendly conversation partner. The user is talking to you casually.
+
+The user said: "{message}"
+
+Respond naturally like a friend would. Be:
+- Friendly and warm
+- Conversational (not formal)
+- Brief (1-3 sentences max)
+- Interested in what they're saying
+
+Don't give grammar lessons or corrections. Just have a normal friendly chat!
+"""
+
+
+def get_english_coaching_prompt(message: str) -> str:
+    """Format the conversation partner prompt."""
+    return CONVERSATION_PARTNER_PROMPT.format(message=message)
+
