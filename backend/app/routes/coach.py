@@ -1,14 +1,15 @@
 """
-English Coaching Routes
-Dedicated endpoint for the Communication Coach feature
+Conversation Partner Routes
+Dedicated endpoint for the Communication Coach feature using OpenRouter
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import google.generativeai as genai
+import requests
+import json
 import os
 from dotenv import load_dotenv
-from app.services.prompts import get_english_coaching_prompt
+from app.services.prompts import CONVERSATION_PARTNER_PROMPT
 
 load_dotenv()
 
@@ -26,47 +27,57 @@ class CoachingResponse(BaseModel):
     feedback: str
 
 
-# Initialize Gemini (lazy loading)
-_model = None
-
-
-def get_model():
-    """Get or create the Gemini model instance."""
-    global _model
-    if _model is None:
-        api_key = os.getenv("GEMINI_API_KEY")
-        model_name = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash")
-        
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY not found")
-        
-        genai.configure(api_key=api_key)
-        _model = genai.GenerativeModel(model_name)
-    return _model
-
-
 @router.post("/feedback", response_model=CoachingResponse)
 async def get_coaching_feedback(request: CoachingRequest):
     """
-    Get English speaking feedback from AI coach.
+    Get conversation feedback from AI partner.
     
-    This endpoint uses a different prompt than the main chat,
-    specifically designed for English language coaching.
+    Uses OpenRouter's free Mistral model for natural conversation.
     """
     try:
-        model = get_model()
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        model = os.getenv("OPENROUTER_MODEL", "mistralai/devstral-2512:free")
         
-        # Use the English coaching prompt (not health tracking)
-        prompt = get_english_coaching_prompt(request.message)
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found")
         
-        # Get AI response
-        response = model.generate_content(prompt)
-        feedback = response.text.strip()
+        # Format the conversation prompt
+        prompt = CONVERSATION_PARTNER_PROMPT.format(message=request.message)
         
-        print(f"🎓 Coaching feedback for: '{request.message[:50]}...'")
+        # Make request to OpenRouter
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://ak-personal-vault.vercel.app",
+            "X-Title": "Ak Personal Vault",
+        }
+        
+        data = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
+        
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(data),
+            timeout=30
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        feedback = result['choices'][0]['message']['content'].strip()
+        
+        print(f"💬 Conversation response for: '{request.message[:50]}...'")
         
         return CoachingResponse(feedback=feedback)
         
     except Exception as e:
         print(f"❌ Coaching error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+

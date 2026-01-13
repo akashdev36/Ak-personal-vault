@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { sendCoachingMessage } from '../services/apiService'
 import VoiceController from '../services/VoiceController'
 
@@ -148,15 +148,15 @@ export default function CommunicationCoach({ userEmail, onBack }: CommunicationC
                 // Stop recording and send to AI
                 voiceController.stopRecording()
 
-                // Wait a bit longer for mobile to capture final results
+                // Wait for final transcription results
                 setTimeout(() => {
-                    // Get the combined text (transcription + any interim that wasn't finalized)
-                    const textToSend = (transcriptionRef.current + ' ' + interimText).trim()
+                    // Use only the final transcription (interim becomes final automatically)
+                    const textToSend = transcriptionRef.current.trim()
 
                     if (textToSend) {
                         sendToAI(textToSend)
                     }
-                }, 800) // Longer delay for mobile
+                }, 800) // Longer delay for mobile to finalize results
             } else {
                 setCurrentTranscription('') // Clear previous transcription
                 setInterimText('')
@@ -201,7 +201,7 @@ export default function CommunicationCoach({ userEmail, onBack }: CommunicationC
                     {messages.length === 0 && !currentTranscription && (
                         <div className="text-center py-16">
                             <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-purple-500/30">
-                                <span className="text-5xl">🎙️</span>
+                                <span className="text-5xl">≡ƒÄÖ∩╕Å</span>
                             </div>
                             <h2 className="text-2xl font-bold text-white mb-2">Ready to Practice!</h2>
                             <p className="text-white/60 max-w-xs mx-auto">
@@ -278,7 +278,7 @@ export default function CommunicationCoach({ userEmail, onBack }: CommunicationC
 
                 {/* Status text */}
                 <p className="text-white/50 text-sm">
-                    {isListening ? '🎤 Listening...' : isLoading ? '🤔 Thinking...' : 'Tap to speak'}
+                    {isListening ? '≡ƒÄñ Listening...' : isLoading ? '≡ƒñö Thinking...' : 'Tap to speak'}
                 </p>
 
                 {/* Big Microphone Button */}
