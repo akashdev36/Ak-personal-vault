@@ -8,7 +8,7 @@ import Journal from './components/Journal'
 import AiChat from './components/AiChat'
 import CommunicationCoach from './components/CommunicationCoach'
 import Login from './components/Login'
-import { isAuthenticated, getCurrentUser } from './services/googleDrive'
+import { isAuthenticated, getCurrentUser, silentTokenRefresh } from './services/googleDrive'
 import { AppDataProvider } from './contexts/AppDataContext'
 
 function App() {
@@ -17,9 +17,21 @@ function App() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        // Check if user is already authenticated
-        setAuthenticated(isAuthenticated())
-        setLoading(false)
+        // Check if user is authenticated (persistent login)
+        const checkAuth = async () => {
+            if (isAuthenticated()) {
+                // User exists in localStorage - try to refresh token silently
+                setAuthenticated(true)
+                // Refresh token in background (don't block UI)
+                silentTokenRefresh().then(success => {
+                    if (!success) {
+                        console.log('Token refresh needed on next API call')
+                    }
+                })
+            }
+            setLoading(false)
+        }
+        checkAuth()
     }, [])
 
     const handleLoginSuccess = () => {

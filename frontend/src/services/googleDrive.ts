@@ -205,23 +205,70 @@ export const getCurrentUser = (): GoogleUser | null => {
     return JSON.parse(userStr)
 }
 
-// Check if user is authenticated and token is valid
+// Check if user is authenticated (persistent - like Instagram)
+// User stays logged in until they manually sign out
 export const isAuthenticated = (): boolean => {
+    const user = getCurrentUser()
+    return user !== null
+}
+
+// Check if token needs refresh (for API calls)
+export const isTokenExpired = (): boolean => {
+    const expiryStr = localStorage.getItem('tokenExpiry')
+    if (!expiryStr) return true
+    return Date.now() >= parseInt(expiryStr)
+}
+
+// Silent token refresh - call on app startup
+export const silentTokenRefresh = async (): Promise<boolean> => {
     const user = getCurrentUser()
     if (!user) return false
 
-    // Check if token has expired
-    const expiryStr = localStorage.getItem('tokenExpiry')
-    if (!expiryStr) return false
-
-    const expiry = parseInt(expiryStr)
-    const now = Date.now()
-
-    // If token expired, clear session
-    if (now >= expiry) {
-        signOut()
-        return false
+    // If token not expired, just restore it
+    if (!isTokenExpired()) {
+        try {
+            await initializeGoogleAPI()
+            await initializeGIS()
+            if (window.gapi?.client) {
+                window.gapi.client.setToken({ access_token: user.accessToken })
+            }
+            return true
+        } catch {
+            return false
+        }
     }
 
-    return true
+    // Token expired - try silent refresh
+    try {
+        await initializeGoogleAPI()
+        await initializeGIS()
+
+        return new Promise((resolve) => {
+            const client = window.google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CONFIG.clientId,
+                scope: GOOGLE_CONFIG.scopes.join(' '),
+                callback: async (response: any) => {
+                    if (response.error) {
+                        console.log('Silent refresh failed, user needs to re-login')
+                        resolve(false)
+                        return
+                    }
+
+                    // Update token
+                    window.gapi.client.setToken({ access_token: response.access_token })
+                    user.accessToken = response.access_token
+                    localStorage.setItem('googleUser', JSON.stringify(user))
+                    localStorage.setItem('tokenExpiry', (Date.now() + 3600000).toString())
+                    console.log('✅ Token refreshed silently')
+                    resolve(true)
+                },
+            })
+
+            // Request token without prompt (silent)
+            client.requestAccessToken({ prompt: '' })
+        })
+    } catch (error) {
+        console.error('Silent refresh error:', error)
+        return false
+    }
 }

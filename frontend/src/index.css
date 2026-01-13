@@ -126,6 +126,23 @@ body {
   .glass {
     @apply bg-white/80 backdrop-blur-md;
   }
+
+  /* Safe area support for modern phones (notch, home bar) */
+  .safe-top {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+
+  .safe-bottom {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .safe-left {
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+
+  .safe-right {
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
 }
 
 @layer utilities {

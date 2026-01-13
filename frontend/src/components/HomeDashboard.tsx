@@ -3,6 +3,8 @@ import { Habit, HabitEntry, getTodayDate, getDateDaysAgo, calculateStreaks } fro
 import { NoteItem } from '../services/notesService'
 import { saveJournalToDrive, loadJournalFromDrive } from '../services/journalService'
 import { getDailyQuote } from '../services/apiService'
+import AuroraBackground from './ui/AuroraBackground'
+import { CountUp } from './ui/AnimatedText'
 
 interface HomeDashboardProps {
     onNavigateTo: (page: string) => void
@@ -164,21 +166,28 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
     const motivation = motivationMessages.find(m => m.condition) || motivationMessages[motivationMessages.length - 1]
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8">
-            <div className="max-w-7xl mx-auto">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50 p-4 md:p-8 relative overflow-hidden">
+            {/* Premium Subtle Animated Background */}
+            <AuroraBackground
+                colorStops={['#e0e7ff', '#c4b5fd', '#f5d0fe', '#fce7f3']}
+                amplitude={0.8}
+                blend={0.25}
+            />
+
+            <div className="max-w-7xl mx-auto relative z-10">
                 {/* Dashboard Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-                    {/* 1. Time & Date Display - Spans full width on mobile, 2 cols on desktop */}
-                    <div className="lg:col-span-2">
-                        <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-3xl p-8 shadow-xl text-white">
+                    {/* 1. Time & Date Display - Premium white card */}
+                    <div className="lg:col-span-2 animate-slideUp">
+                        <div className="bg-white rounded-3xl p-8 shadow-xl border border-purple-100">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                                 <div>
-                                    <p className="text-lg opacity-90 mb-2">{greeting}, Akash! 👋</p>
-                                    <h1 className="text-5xl md:text-6xl font-black mb-2">
+                                    <p className="text-lg text-black mb-2 animate-fadeIn">{greeting}, Akash! 👋</p>
+                                    <h1 className="text-5xl md:text-7xl font-black bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 bg-clip-text text-transparent animate-gradient-x bg-200%">
                                         {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                     </h1>
-                                    <p className="text-lg opacity-90">
+                                    <p className="text-lg text-black/70 mt-2">
                                         {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                                     </p>
                                 </div>
@@ -186,251 +195,281 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                         </div>
                     </div>
 
-                    {/* Daily Motivational Quote Card - Right after clock */}
+                    {/* Daily Motivational Quote Card - Premium purple */}
                     {dailyQuote && (
-                        <div className="lg:col-span-3 bg-gradient-to-r from-amber-400 via-orange-400 to-pink-500 rounded-3xl p-6 shadow-xl text-white">
-                            <div className="flex items-center gap-4">
-                                <div className="text-4xl">💡</div>
-                                <div className="flex-1">
-                                    <p className="text-xs font-semibold uppercase tracking-wider opacity-80 mb-1">Today's Inspiration</p>
-                                    <p className="text-xl md:text-2xl font-bold leading-relaxed">
-                                        {dailyQuote}
-                                    </p>
+                        <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.1s' }}>
+                            <div className="bg-gradient-to-r from-violet-600 to-purple-600 rounded-3xl p-6 shadow-xl text-white hover:shadow-2xl transition-shadow duration-300">
+                                <div className="flex items-center gap-4">
+                                    <div className="text-4xl">✨</div>
+                                    <div className="flex-1">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-white/70 mb-1">Today's Inspiration</p>
+                                        <p className="text-xl md:text-2xl font-bold leading-relaxed">
+                                            {dailyQuote}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* 2. Overall Progress Ring */}
-                    <div className="bg-white rounded-3xl p-6 shadow-xl">
-                        <h3 className="text-sm font-bold text-gray-600 mb-4">Today's Progress</h3>
-                        <div className="flex flex-col items-center">
-                            <div className="relative w-40 h-40">
-                                <svg className="w-40 h-40 transform -rotate-90">
-                                    <circle cx="80" cy="80" r="70" stroke="#e5e7eb" strokeWidth="12" fill="none" />
-                                    <circle
-                                        cx="80"
-                                        cy="80"
-                                        r="70"
-                                        stroke={todayPercentage >= 75 ? '#22c55e' : todayPercentage >= 50 ? '#eab308' : '#ef4444'}
-                                        strokeWidth="12"
-                                        fill="none"
-                                        strokeDasharray={`${2 * Math.PI * 70}`}
-                                        strokeDashoffset={`${2 * Math.PI * 70 * (1 - todayPercentage / 100)}`}
-                                        className="transition-all duration-1000"
-                                        strokeLinecap="round"
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="text-4xl font-black text-gray-900">{todayPercentage}%</span>
-                                    <span className="text-sm text-gray-500">{completedToday}/{habits.length}</span>
+                    {/* 2. Overall Progress Ring - White card */}
+                    <div className="animate-slideUp" style={{ animationDelay: '0.2s' }}>
+                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-purple-100">
+                            <h3 className="text-sm font-bold text-black mb-4">Today's Progress</h3>
+                            <div className="flex flex-col items-center">
+                                <div className="relative w-40 h-40">
+                                    <svg className="w-40 h-40 transform -rotate-90">
+                                        <circle cx="80" cy="80" r="70" stroke="#e5e7eb" strokeWidth="12" fill="none" />
+                                        <circle
+                                            cx="80"
+                                            cy="80"
+                                            r="70"
+                                            stroke={todayPercentage >= 75 ? '#22c55e' : todayPercentage >= 50 ? '#eab308' : '#ec4899'}
+                                            strokeWidth="12"
+                                            fill="none"
+                                            strokeDasharray={`${2 * Math.PI * 70}`}
+                                            strokeDashoffset={`${2 * Math.PI * 70 * (1 - todayPercentage / 100)}`}
+                                            className="transition-all duration-1000 drop-shadow-lg"
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-4xl font-black text-black">{todayPercentage}%</span>
+                                        <span className="text-sm text-black/70">{completedToday}/{habits.length}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* 4. Daily Motivation */}
-                    <div className="lg:col-span-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-3xl p-6 shadow-lg border border-purple-200">
-                        <div className="flex items-center gap-4">
-                            <div className="text-5xl">{motivation.icon}</div>
-                            <div>
-                                <p className="text-xl font-bold text-gray-900">{motivation.message}</p>
+                    {/* 4. Daily Motivation - White with purple accent */}
+                    <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.3s' }}>
+                        <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-3xl p-6 shadow-lg border border-purple-200 hover:shadow-xl transition-shadow">
+                            <div className="flex items-center gap-4">
+                                <div className="text-5xl animate-bounce-soft">{motivation.icon}</div>
+                                <div>
+                                    <p className="text-xl font-bold text-black">{motivation.message}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* 5. Today's Habits */}
-                    <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-xl">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-xl font-bold text-gray-900">Today's Habits</h3>
-                            <span className="text-sm text-gray-500">
-                                {habits.filter(h => !isHabitCompleted(h.id, today)).length} pending
-                            </span>
-                        </div>
-
-                        {habits.length === 0 ? (
-                            <div className="text-center py-8">
-                                <div className="text-4xl mb-2">🎯</div>
-                                <p className="text-gray-600 mb-4">No habits yet</p>
-                                <button
-                                    onClick={() => onNavigateTo('habits')}
-                                    className="px-4 py-2 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
-                                >
-                                    Create Habit
-                                </button>
+                    {/* 5. Today's Habits - White card */}
+                    <div className="lg:col-span-2 animate-slideUp" style={{ animationDelay: '0.4s' }}>
+                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-purple-100">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-bold text-black">Today's Habits</h3>
+                                <span className="text-sm text-black/70">
+                                    {habits.filter(h => !isHabitCompleted(h.id, today)).length} pending
+                                </span>
                             </div>
-                        ) : (
-                            <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {habits.filter(h => !isHabitCompleted(h.id, today)).length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <div className="text-5xl mb-3">🎉</div>
-                                        <p className="text-lg font-bold text-gray-900 mb-1">All done for today!</p>
-                                        <p className="text-sm text-gray-600">You've completed all your habits!</p>
-                                    </div>
-                                ) : (
-                                    habits.filter(h => !isHabitCompleted(h.id, today)).map(habit => (
-                                        <div
-                                            key={habit.id}
-                                            onClick={() => toggleHabit(habit.id)}
-                                            className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer group"
-                                        >
+
+                            {habits.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <div className="text-4xl mb-2">🎯</div>
+                                    <p className="text-black/70 mb-4">No habits yet</p>
+                                    <button
+                                        onClick={() => onNavigateTo('habits')}
+                                        className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
+                                    >
+                                        Create Habit
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {habits.filter(h => !isHabitCompleted(h.id, today)).length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <div className="text-5xl mb-3">🎉</div>
+                                            <p className="text-lg font-bold text-black mb-1">All done for today!</p>
+                                            <p className="text-sm text-black/70">You've completed all your habits!</p>
+                                        </div>
+                                    ) : (
+                                        habits.filter(h => !isHabitCompleted(h.id, today)).map(habit => (
                                             <div
-                                                className="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0"
-                                                style={{ backgroundColor: habit.color + '20' }}
+                                                key={habit.id}
+                                                onClick={() => toggleHabit(habit.id)}
+                                                className="flex items-center gap-3 p-3 rounded-xl hover:bg-purple-50 transition-all cursor-pointer group active:scale-95"
                                             >
-                                                {habit.icon}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="font-medium text-gray-900">
-                                                    {habit.name}
+                                                <div
+                                                    className="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0"
+                                                    style={{ backgroundColor: habit.color + '20' }}
+                                                >
+                                                    {habit.icon}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="font-medium text-black">
+                                                        {habit.name}
+                                                    </div>
+                                                </div>
+                                                <div
+                                                    className="w-6 h-6 rounded-md border-2 border-gray-300 flex items-center justify-center transition-all group-hover:border-purple-400"
+                                                >
                                                 </div>
                                             </div>
-                                            <div
-                                                className="w-6 h-6 rounded-md border-2 border-gray-300 flex items-center justify-center transition-all"
-                                            >
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        )}
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {/* 6. Recent Notes Widget */}
-                    <div className="bg-white rounded-3xl p-6 shadow-xl">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-xl font-bold text-gray-900">Recent Notes</h3>
-                            <button
-                                onClick={() => onNavigateTo('note')}
-                                className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold"
-                            >
-                                View All →
-                            </button>
-                        </div>
-
-                        {recentNotes.length === 0 ? (
-                            <div className="text-center py-8">
-                                <div className="text-4xl mb-2">📝</div>
-                                <p className="text-gray-600 mb-4 text-sm">No notes yet</p>
+                    {/* 6. Recent Notes Widget - White card */}
+                    <div className="animate-slideUp" style={{ animationDelay: '0.5s' }}>
+                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-purple-100 h-full">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-bold text-black">Recent Notes</h3>
                                 <button
                                     onClick={() => onNavigateTo('note')}
-                                    className="px-4 py-2 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors text-sm"
+                                    className="text-sm text-purple-600 hover:text-purple-700 font-semibold"
                                 >
-                                    Create Note
+                                    View All →
                                 </button>
                             </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {recentNotes.map(note => (
-                                    <div
-                                        key={note.id}
+
+                            {recentNotes.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <div className="text-4xl mb-2">📝</div>
+                                    <p className="text-black/70 mb-4 text-sm">No notes yet</p>
+                                    <button
                                         onClick={() => onNavigateTo('note')}
-                                        className="p-3 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer border border-gray-100"
+                                        className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-sm"
                                     >
-                                        <h4 className="font-semibold text-gray-900 mb-1 truncate">{note.title}</h4>
-                                        <p className="text-xs text-gray-500 line-clamp-2" dangerouslySetInnerHTML={{ __html: note.content.replace(/<[^>]*>/g, '') }} />
-                                        <p className="text-xs text-gray-400 mt-1">
-                                            {note.createdAt.toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                        Create Note
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {recentNotes.map(note => (
+                                        <div
+                                            key={note.id}
+                                            onClick={() => onNavigateTo('note')}
+                                            className="p-3 rounded-xl hover:bg-purple-50 transition-all cursor-pointer border border-gray-100 active:scale-95"
+                                        >
+                                            <h4 className="font-semibold text-black mb-1 truncate">{note.title}</h4>
+                                            <p className="text-xs text-black/70 line-clamp-2" dangerouslySetInnerHTML={{ __html: note.content.replace(/<[^>]*>/g, '') }} />
+                                            <p className="text-xs text-black/50 mt-1">
+                                                {note.createdAt.toLocaleDateString()}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {/* 7. Quick Actions Panel */}
-                    <div className="lg:col-span-3 bg-white rounded-3xl p-6 shadow-xl">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <button
-                                onClick={() => onNavigateTo('note')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                <span className="font-bold">New Note</span>
-                            </button>
+                    {/* 7. Quick Actions Panel - White card */}
+                    <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.6s' }}>
+                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-purple-100">
+                            <h3 className="text-xl font-bold text-black mb-4">Quick Actions</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <button
+                                    onClick={() => onNavigateTo('note')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    <span className="font-bold">New Note</span>
+                                </button>
 
-                            <button
-                                onClick={() => onNavigateTo('habits')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                                </svg>
-                                <span className="font-bold">New Habit</span>
-                            </button>
+                                <button
+                                    onClick={() => onNavigateTo('habits')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    <span className="font-bold">New Habit</span>
+                                </button>
 
-                            <button
-                                onClick={() => onNavigateTo('habits')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                                <span className="font-bold">Statistics</span>
-                            </button>
+                                <button
+                                    onClick={() => onNavigateTo('videos')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="font-bold">Shorts</span>
+                                </button>
 
-                            <button
-                                onClick={() => onNavigateTo('videos')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-red-500 to-pink-600 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className="font-bold">Shorts</span>
-                            </button>
+                                <button
+                                    onClick={() => onNavigateTo('journal')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
+                                    <span className="font-bold">Diary</span>
+                                </button>
 
-                            <button
-                                onClick={() => onNavigateTo('journal')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                </svg>
-                                <span className="font-bold">Dairy</span>
-                            </button>
+                                <button
+                                    onClick={() => onNavigateTo('ai-chat')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <span className="text-3xl mb-2">🤖</span>
+                                    <span className="font-bold">AI Chat</span>
+                                </button>
 
-                            <button
-                                onClick={() => onNavigateTo('ai-chat')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <span className="text-3xl mb-2">🤖</span>
-                                <span className="font-bold">AI Chat</span>
-                            </button>
+                                <button
+                                    onClick={() => onNavigateTo('communication-coach')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <span className="text-3xl mb-2">🎙️</span>
+                                    <span className="font-bold">English Coach</span>
+                                </button>
 
-                            <button
-                                onClick={() => onNavigateTo('communication-coach')}
-                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-105 transition-transform shadow-lg"
-                            >
-                                <span className="text-3xl mb-2">🎓</span>
-                                <span className="font-bold">English Coach</span>
-                            </button>
+                                <button
+                                    onClick={() => onNavigateTo('habits')}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                    </svg>
+                                    <span className="font-bold">Statistics</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setShowCheckInModal(true)}
+                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
+                                >
+                                    <span className="text-3xl mb-2">✨</span>
+                                    <span className="font-bold">Check-in</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
 
-                    {/* 9. Personal Stats */}
-                    <div className="bg-white rounded-3xl p-6 shadow-xl">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Your Stats</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="text-center p-4 bg-blue-50 rounded-xl">
-                                <div className="text-3xl font-black text-blue-600">{notes.length}</div>
-                                <div className="text-xs text-gray-600 mt-1">Notes</div>
-                            </div>
-                            <div className="text-center p-4 bg-purple-50 rounded-xl">
-                                <div className="text-3xl font-black text-purple-600">{habits.length}</div>
-                                <div className="text-xs text-gray-600 mt-1">Habits</div>
-                            </div>
-                            <div className="text-center p-4 bg-green-50 rounded-xl">
-                                <div className="text-3xl font-black text-green-600">{entries.filter(e => e.completed).length}</div>
-                                <div className="text-xs text-gray-600 mt-1">Total Done</div>
-                            </div>
-                            <div className="text-center p-4 bg-orange-50 rounded-xl">
-                                <div className="text-3xl font-black text-orange-600">{longestStreak}</div>
-                                <div className="text-xs text-gray-600 mt-1">Best Streak</div>
+                    {/* 9. Personal Stats - Unified purple theme */}
+                    <div className="animate-slideUp" style={{ animationDelay: '0.7s' }}>
+                        <div className="bg-white rounded-3xl p-6 shadow-xl border border-purple-100">
+                            <h3 className="text-xl font-bold text-black mb-4">Your Stats</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="text-center p-4 bg-purple-50 rounded-xl">
+                                    <div className="text-3xl font-black text-purple-600">
+                                        <CountUp end={notes.length} duration={1500} delay={800} />
+                                    </div>
+                                    <div className="text-xs text-black mt-1">Notes</div>
+                                </div>
+                                <div className="text-center p-4 bg-purple-50 rounded-xl">
+                                    <div className="text-3xl font-black text-purple-600">
+                                        <CountUp end={habits.length} duration={1500} delay={900} />
+                                    </div>
+                                    <div className="text-xs text-black mt-1">Habits</div>
+                                </div>
+                                <div className="text-center p-4 bg-purple-50 rounded-xl">
+                                    <div className="text-3xl font-black text-purple-600">
+                                        <CountUp end={entries.filter(e => e.completed).length} duration={1500} delay={1000} />
+                                    </div>
+                                    <div className="text-xs text-black mt-1">Total Done</div>
+                                </div>
+                                <div className="text-center p-4 bg-purple-50 rounded-xl">
+                                    <div className="text-3xl font-black text-purple-600">
+                                        <CountUp end={longestStreak} duration={1500} delay={1100} />
+                                    </div>
+                                    <div className="text-xs text-black mt-1">Best Streak</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -438,8 +477,8 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                     {/* 8. This Week's Activity - Heatmap Style */}
                     <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-xl">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-bold text-gray-900">Weekly Heatmap</h3>
-                            <div className="text-sm text-gray-500">
+                            <h3 className="text-xl font-bold text-black">Weekly Heatmap</h3>
+                            <div className="text-sm text-black/70">
                                 {weekData.filter(d => d.percentage === 100).length} perfect days
                             </div>
                         </div>
@@ -458,7 +497,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
 
                                 return (
                                     <div key={index} className="flex flex-col items-center gap-2">
-                                        <span className="text-xs font-medium text-gray-600">{day.day}</span>
+                                        <span className="text-xs font-medium text-black">{day.day}</span>
                                         <div
                                             className={`w-full aspect-square rounded-xl border-2 ${colors[intensity]} transition-all hover:scale-110 cursor-pointer relative group`}
                                             title={`${day.percentage}% (${day.completed}/${day.total})`}
@@ -475,7 +514,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                                                 </svg>
                                             )}
                                         </div>
-                                        <span className="text-xs font-bold text-gray-800">{day.percentage}%</span>
+                                        <span className="text-xs font-bold text-black">{day.percentage}%</span>
                                     </div>
                                 )
                             })}
@@ -483,7 +522,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
 
                         {/* Legend */}
                         <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
-                            <span className="text-xs text-gray-500">Less</span>
+                            <span className="text-xs text-black/70">Less</span>
                             <div className="flex gap-1">
                                 <div className="w-4 h-4 rounded bg-gray-100 border border-gray-200"></div>
                                 <div className="w-4 h-4 rounded bg-red-200 border border-red-300"></div>
@@ -491,28 +530,28 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                                 <div className="w-4 h-4 rounded bg-blue-200 border border-blue-300"></div>
                                 <div className="w-4 h-4 rounded bg-green-500 border border-green-600"></div>
                             </div>
-                            <span className="text-xs text-gray-500">More</span>
+                            <span className="text-xs text-black/70">More</span>
                         </div>
                     </div>
 
                     {/* 10. Upcoming/Missed Habits */}
                     <div className="lg:col-span-3 bg-white rounded-3xl p-6 shadow-xl">
-                        <h3 className="text-xl font-bold text-gray-900 mb-4">Status</h3>
+                        <h3 className="text-xl font-bold text-black mb-4">Status</h3>
                         <div className="grid md:grid-cols-2 gap-6">
                             {/* Pending Today */}
                             <div>
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                                    <h4 className="font-semibold text-gray-700">Pending Today</h4>
+                                    <h4 className="font-semibold text-black">Pending Today</h4>
                                 </div>
                                 {habits.filter(h => !isHabitCompleted(h.id, today)).length === 0 ? (
-                                    <p className="text-sm text-gray-500">All done! 🎉</p>
+                                    <p className="text-sm text-black/70">All done! 🎉</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {habits.filter(h => !isHabitCompleted(h.id, today)).map(habit => (
                                             <div key={habit.id} className="flex items-center gap-2 text-sm">
                                                 <span>{habit.icon}</span>
-                                                <span className="text-gray-700">{habit.name}</span>
+                                                <span className="text-black">{habit.name}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -523,16 +562,16 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                             <div>
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                    <h4 className="font-semibold text-gray-700">Completed Today</h4>
+                                    <h4 className="font-semibold text-black">Completed Today</h4>
                                 </div>
                                 {habits.filter(h => isHabitCompleted(h.id, today)).length === 0 ? (
-                                    <p className="text-sm text-gray-500">Nothing yet</p>
+                                    <p className="text-sm text-black/70">Nothing yet</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {habits.filter(h => isHabitCompleted(h.id, today)).map(habit => (
                                             <div key={habit.id} className="flex items-center gap-2 text-sm">
                                                 <span>{habit.icon}</span>
-                                                <span className="text-gray-700">{habit.name}</span>
+                                                <span className="text-black">{habit.name}</span>
                                                 <span className="text-green-600">✓</span>
                                             </div>
                                         ))}
@@ -572,8 +611,8 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
                     <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-scaleIn">
                         <div className="text-center mb-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">How are you feeling?</h2>
-                            <p className="text-gray-600">{currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                            <h2 className="text-2xl font-bold text-black mb-2">How are you feeling?</h2>
+                            <p className="text-black">{currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                         </div>
 
                         {/* Mood Selection */}
@@ -594,7 +633,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
 
                         {/* Note Input */}
                         <div className="mb-8">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Highlight of the day (optional)</label>
+                            <label className="block text-sm font-medium text-black mb-2">Highlight of the day (optional)</label>
                             <textarea
                                 value={todaysNote}
                                 onChange={(e) => setTodaysNote(e.target.value)}
@@ -607,7 +646,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowCheckInModal(false)}
-                                className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors"
+                                className="flex-1 py-3 text-black font-medium hover:bg-gray-100 rounded-xl transition-colors"
                             >
                                 Cancel
                             </button>
