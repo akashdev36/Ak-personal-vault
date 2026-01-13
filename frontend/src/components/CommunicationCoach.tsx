@@ -148,15 +148,15 @@ export default function CommunicationCoach({ userEmail, onBack }: CommunicationC
                 // Stop recording and send to AI
                 voiceController.stopRecording()
 
-                // Use ref value (not stale state)
-                const textToSend = transcriptionRef.current.trim()
+                // Wait a bit longer for mobile to capture final results
+                setTimeout(() => {
+                    // Get the combined text (transcription + any interim that wasn't finalized)
+                    const textToSend = (transcriptionRef.current + ' ' + interimText).trim()
 
-                if (textToSend) {
-                    // Small delay to ensure last transcription is captured
-                    setTimeout(() => {
-                        sendToAI(transcriptionRef.current)
-                    }, 500)
-                }
+                    if (textToSend) {
+                        sendToAI(textToSend)
+                    }
+                }, 800) // Longer delay for mobile
             } else {
                 setCurrentTranscription('') // Clear previous transcription
                 setInterimText('')
