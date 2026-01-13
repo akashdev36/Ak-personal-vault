@@ -57,14 +57,19 @@ def get_ai_provider() -> AIProvider:
     
     Set AI_PROVIDER in .env to switch providers:
     - "gemini" (default)
+    - "openrouter" (free Mistral model)
     - "openai" (future)
     - "claude" (future)
     """
-    provider_name = os.getenv("AI_PROVIDER", "gemini").lower()
+    provider_name = os.getenv("AI_PROVIDER", "openrouter").lower()
     
     if provider_name == "gemini":
         from app.services.providers.gemini_provider import GeminiProvider
         return GeminiProvider()
+    
+    elif provider_name == "openrouter":
+        from app.services.providers.openrouter_provider import OpenRouterProvider
+        return OpenRouterProvider()
     
     # Future providers can be added here:
     # elif provider_name == "openai":
@@ -76,7 +81,7 @@ def get_ai_provider() -> AIProvider:
     #     return ClaudeProvider()
     
     else:
-        raise ValueError(f"Unknown AI provider: {provider_name}. Supported: gemini")
+        raise ValueError(f"Unknown AI provider: {provider_name}. Supported: gemini, openrouter")
 
 
 # Singleton instance

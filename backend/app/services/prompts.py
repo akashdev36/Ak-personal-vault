@@ -133,8 +133,3 @@ Respond naturally like a friend would. Be:
 Don't give grammar lessons or corrections. Just have a normal friendly chat!
 """
 
-
-def get_english_coaching_prompt(message: str) -> str:
-    """Format the conversation partner prompt."""
-    return CONVERSATION_PARTNER_PROMPT.format(message=message)
-
