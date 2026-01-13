@@ -6,6 +6,7 @@ import Habits from './components/Habits'
 import HomeDashboard from './components/HomeDashboard'
 import Journal from './components/Journal'
 import AiChat from './components/AiChat'
+import CommunicationCoach from './components/CommunicationCoach'
 import Login from './components/Login'
 import { isAuthenticated, getCurrentUser } from './services/googleDrive'
 import { AppDataProvider } from './contexts/AppDataContext'
@@ -79,6 +80,13 @@ function App() {
 
                 {currentPage === 'ai-chat' && (
                     <AiChat
+                        userEmail={getCurrentUser()?.email || 'anonymous'}
+                        onBack={() => setCurrentPage('home')}
+                    />
+                )}
+
+                {currentPage === 'communication-coach' && (
+                    <CommunicationCoach
                         userEmail={getCurrentUser()?.email || 'anonymous'}
                         onBack={() => setCurrentPage('home')}
                     />

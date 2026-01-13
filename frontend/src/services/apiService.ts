@@ -153,3 +153,28 @@ export async function checkBackendHealth(): Promise<boolean> {
         return false
     }
 }
+
+/**
+ * Send a message to the English coaching assistant
+ * Uses a different prompt than regular chat for language practice
+ */
+export async function sendCoachingMessage(message: string, userEmail: string): Promise<{ feedback: string }> {
+    const response = await fetch(`${API_BASE_URL}/api/coach/feedback`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            message,
+            user_id: userEmail
+        })
+    })
+
+    if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.detail || 'Failed to get coaching feedback')
+    }
+
+    return response.json()
+}
+

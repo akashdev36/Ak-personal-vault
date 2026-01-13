@@ -400,6 +400,14 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                                 <span className="text-3xl mb-2">🤖</span>
                                 <span className="font-bold">AI Chat</span>
                             </button>
+
+                            <button
+                                onClick={() => onNavigateTo('communication-coach')}
+                                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white hover:scale-105 transition-transform shadow-lg"
+                            >
+                                <span className="text-3xl mb-2">🎓</span>
+                                <span className="font-bold">English Coach</span>
+                            </button>
                         </div>
                     </div>
 
