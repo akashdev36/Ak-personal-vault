@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { JournalEntry, loadJournalFromDrive } from '../services/journalService'
+import { JournalEntry, loadJournalFromDrive, saveJournalToDrive } from '../services/journalService'
+import { getTodayDate } from '../services/habitsService'
 
 interface JournalProps {
     onBack: () => void
@@ -9,11 +10,12 @@ export default function Journal({ onBack }: JournalProps) {
     const [entries, setEntries] = useState<JournalEntry[]>([])
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const [searchQuery, setSearchQuery] = useState('')
-    const [selectedMood, setSelectedMood] = useState<string | null>(null)
     const [showFilters, setShowFilters] = useState(false)
     const [loading, setLoading] = useState(true)
-
-    const moods = ['🤩', '🙂', '😐', '😕', '😫']
+    const [newMessage, setNewMessage] = useState('')
+    const [sending, setSending] = useState(false)
+    const [isEditing, setIsEditing] = useState(false)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     useEffect(() => {
         loadEntries()
@@ -21,6 +23,19 @@ export default function Journal({ onBack }: JournalProps) {
 
     useEffect(() => {
         scrollToBottom()
+    }, [entries])
+
+    // Load today's message into input for editing
+    useEffect(() => {
+        const todayDate = getTodayDate()
+        const todayEntry = entries.find(e => e.date === todayDate)
+        if (todayEntry) {
+            setNewMessage(todayEntry.note)
+            setIsEditing(false)  // Start in view mode if entry exists
+        } else {
+            setNewMessage('')
+            setIsEditing(true)   // Start in edit mode if no entry
+        }
     }, [entries])
 
     const loadEntries = async () => {
@@ -34,6 +49,51 @@ export default function Journal({ onBack }: JournalProps) {
             console.error('Error loading journal entries:', error)
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleSendMessage = async () => {
+        if (!newMessage.trim() || sending) return
+
+        try {
+            setSending(true)
+            const timestamp = new Date().toISOString()
+            const todayDate = getTodayDate()
+
+            // Load existing entries
+            const existingEntries = await loadJournalFromDrive()
+
+            // Find today's entry
+            const todayKey = Object.keys(existingEntries).find(key => existingEntries[key].date === todayDate)
+
+            if (todayKey) {
+                // Update existing entry for today
+                existingEntries[todayKey] = {
+                    ...existingEntries[todayKey],
+                    note: newMessage.trim(),
+                    timestamp: timestamp
+                }
+            } else {
+                // Create new entry for today
+                existingEntries[timestamp] = {
+                    date: todayDate,
+                    mood: '📝',
+                    note: newMessage.trim(),
+                    timestamp
+                }
+            }
+
+            // Save to Drive
+            await saveJournalToDrive(existingEntries)
+
+            // Reload and exit edit mode
+            await loadEntries()
+            setIsEditing(false)
+        } catch (error) {
+            console.error('Error sending message:', error)
+            await loadEntries()
+        } finally {
+            setSending(false)
         }
     }
 
@@ -53,15 +113,13 @@ export default function Journal({ onBack }: JournalProps) {
         return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
     }
 
-    // Filter entries based on search and mood
+    // Filter entries based on search only
     const filteredEntries = entries.filter(entry => {
         const matchesSearch = !searchQuery ||
             entry.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             formatDateHeader(entry.date).toLowerCase().includes(searchQuery.toLowerCase())
 
-        const matchesMood = !selectedMood || entry.mood === selectedMood
-
-        return matchesSearch && matchesMood
+        return matchesSearch
     })
 
     return (
@@ -90,7 +148,7 @@ export default function Journal({ onBack }: JournalProps) {
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                         </svg>
-                        {(selectedMood || searchQuery) && (
+                        {searchQuery && (
                             <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full"></span>
                         )}
                     </button>
@@ -121,34 +179,6 @@ export default function Journal({ onBack }: JournalProps) {
                                     </svg>
                                 </button>
                             )}
-                        </div>
-
-                        {/* Mood Filters */}
-                        <div>
-                            <p className="text-xs text-white/80 mb-2 font-medium">Filter by mood:</p>
-                            <div className="flex gap-2 flex-wrap">
-                                <button
-                                    onClick={() => setSelectedMood(null)}
-                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${!selectedMood
-                                        ? 'bg-white text-[#075e54]'
-                                        : 'bg-white/10 text-white hover:bg-white/20'
-                                        }`}
-                                >
-                                    All
-                                </button>
-                                {moods.map(mood => (
-                                    <button
-                                        key={mood}
-                                        onClick={() => setSelectedMood(selectedMood === mood ? null : mood)}
-                                        className={`px-3 py-1.5 rounded-lg text-xl transition-all ${selectedMood === mood
-                                            ? 'bg-white ring-2 ring-yellow-400'
-                                            : 'bg-white/10 hover:bg-white/20'
-                                            }`}
-                                    >
-                                        {mood}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
                     </div>
                 )}
@@ -185,8 +215,13 @@ export default function Journal({ onBack }: JournalProps) {
                     filteredEntries.map((entry, index) => {
                         const showDateHeader = index === 0 || formatDateHeader(entry.date) !== formatDateHeader(filteredEntries[index - 1].date)
 
+                        // Count unique dates up to this entry to determine left/right
+                        const uniqueDates = new Set(filteredEntries.slice(0, index + 1).map(e => e.date))
+                        const dateIndex = uniqueDates.size - 1
+                        const isRight = dateIndex % 2 === 0  // Even dates on right (today, 2 days ago, etc.)
+
                         return (
-                            <div key={entry.date} className="flex flex-col">
+                            <div key={entry.timestamp || `${entry.date}-${index}`} className="flex flex-col">
                                 {showDateHeader && (
                                     <div className="flex justify-center mb-4 sticky top-2 z-0">
                                         <span className="bg-[#e1f3fb] text-gray-600 text-xs font-medium px-3 py-1 rounded-lg shadow-sm uppercase tracking-wide">
@@ -195,14 +230,30 @@ export default function Journal({ onBack }: JournalProps) {
                                     </div>
                                 )}
 
-                                <div className="self-start max-w-[85%] md:max-w-[70%]">
-                                    <div className="bg-white rounded-tr-xl rounded-br-xl rounded-bl-xl shadow-sm p-3 relative group ml-2 mb-2 before:content-[''] before:absolute before:top-0 before:-left-2 before:w-0 before:h-0 before:border-[8px] before:border-transparent before:border-t-white before:border-r-white">
+                                <div className={`${isRight ? 'self-end' : 'self-start'} max-w-[85%] md:max-w-[70%]`}>
+                                    <div className={`${isRight
+                                        ? 'bg-[#dcf8c6] rounded-tl-xl rounded-bl-xl rounded-br-xl shadow-sm p-3 relative group mr-2 mb-2 before:content-[\'\'] before:absolute before:top-0 before:-right-2 before:w-0 before:h-0 before:border-[8px] before:border-transparent before:border-t-[#dcf8c6] before:border-l-[#dcf8c6]'
+                                        : 'bg-white rounded-tr-xl rounded-br-xl rounded-bl-xl shadow-sm p-3 relative group ml-2 mb-2 before:content-[\'\'] before:absolute before:top-0 before:-left-2 before:w-0 before:h-0 before:border-[8px] before:border-transparent before:border-t-white before:border-r-white'
+                                        }`}>
                                         {/* Mood Header */}
                                         <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
                                             <span className="text-3xl animate-bounce-short">{entry.mood}</span>
                                             <span className="text-sm font-semibold text-gray-800">
                                                 {formatDateHeader(entry.date)}
                                             </span>
+
+                                            {/* Edit button for today's entry - shown on right side */}
+                                            {entry.date === getTodayDate() && !isEditing && (
+                                                <button
+                                                    onClick={() => setIsEditing(true)}
+                                                    className="ml-auto text-gray-500 hover:text-[#075e54] transition-colors p-1"
+                                                    title="Edit entry"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                </button>
+                                            )}
                                         </div>
 
                                         {/* Note Content */}
@@ -214,10 +265,13 @@ export default function Journal({ onBack }: JournalProps) {
                                             <p className="text-gray-400 italic text-sm">No note added</p>
                                         )}
 
-                                        {/* Timestamp */}
-                                        <div className="text-[10px] text-gray-400 text-right mt-1 flex items-center justify-end gap-1">
-                                            {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </div>
+                                        {/* Timestamp - show actual time if available */}
+                                        {entry.timestamp && (
+                                            <div className="text-[10px] text-gray-400 text-right mt-1">
+                                                {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        )}
+
                                     </div>
                                 </div>
                             </div>
@@ -226,6 +280,42 @@ export default function Journal({ onBack }: JournalProps) {
                 )}
                 <div ref={messagesEndRef} />
             </div>
+
+            {/* Input Bar - Only show when editing or no entry for today */}
+            {isEditing && (
+                <div className="bg-[#f0f0f0] border-t border-gray-300 p-3 safe-bottom">
+                    <div className="flex items-end gap-2 max-w-4xl mx-auto">
+                        <textarea
+                            ref={textareaRef}
+                            value={newMessage}
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            onKeyPress={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault()
+                                    handleSendMessage()
+                                }
+                            }}
+                            placeholder="Type a message..."
+                            className="flex-1 p-3 rounded-3xl bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#075e54] resize-none max-h-32 overflow-y-auto"
+                            style={{ fontSize: '16px', minHeight: '44px' }}
+                            rows={1}
+                        />
+                        <button
+                            onClick={handleSendMessage}
+                            disabled={!newMessage.trim() || sending}
+                            className="w-12 h-12 rounded-full bg-[#075e54] text-white flex items-center justify-center hover:bg-[#064e47] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex-shrink-0"
+                        >
+                            {sending ? (
+                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                                </svg>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

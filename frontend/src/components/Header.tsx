@@ -155,8 +155,8 @@ export default function Header({ onPageChange, currentPage, onSignOut }: HeaderP
                         </div>
                     </nav>
 
-                    {/* Sign Out Button */}
-                    <div className="p-4 border-t border-border">
+                    {/* Sign Out Button - with bottom padding for mobile nav */}
+                    <div className="p-4 pb-24 md:pb-4 border-t border-border">
                         <button
                             onClick={() => {
                                 signOut()

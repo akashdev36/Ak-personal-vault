@@ -6,6 +6,31 @@
 // Backend URL - switch between local and production
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+// Track if backend error was shown (show only once per session)
+let backendErrorShown = false
+
+/**
+ * Handle API errors - dispatch event for toast notification
+ */
+const handleApiError = (error: any, context: string): void => {
+    console.error(`API Error (${context}):`, error)
+
+    // Show toast only once per session for connection errors
+    if (!backendErrorShown && (error.message?.includes('fetch') || error.message?.includes('Failed'))) {
+        backendErrorShown = true
+        window.dispatchEvent(new CustomEvent('api-error', {
+            detail: { message: `Backend unavailable. Some features may not work.` }
+        }))
+    }
+}
+
+/**
+ * Reset backend error flag (call on successful connection)
+ */
+export const resetBackendErrorFlag = (): void => {
+    backendErrorShown = false
+}
+
 interface ChatMessage {
     message: string
     user_id: string
@@ -133,13 +158,18 @@ export async function getTrackingEntries(userEmail: string, type?: string, limit
  * Get today's daily motivational quote
  */
 export async function getDailyQuote(): Promise<{ quote: string; date: string }> {
-    const response = await fetch(`${API_BASE_URL}/api/quotes/daily-quote`)
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/quotes/daily-quote`)
 
-    if (!response.ok) {
-        throw new Error('Failed to fetch daily quote')
+        if (!response.ok) {
+            throw new Error('Failed to fetch daily quote')
+        }
+
+        return response.json()
+    } catch (error) {
+        handleApiError(error, 'getDailyQuote')
+        throw error
     }
-
-    return response.json()
 }
 
 /**

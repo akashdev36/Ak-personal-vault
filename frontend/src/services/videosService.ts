@@ -1,5 +1,5 @@
 import { GOOGLE_CONFIG } from '../config/google'
-import { refreshTokenIfNeeded, getCurrentUser } from './googleDrive'
+import { refreshTokenIfNeeded, getCurrentUser, handleAuthError } from './googleDrive'
 
 export interface VideoItem {
     id: string
@@ -184,8 +184,7 @@ const getOrCreateVideosFolder = async (): Promise<string> => {
         console.error('Error getting/creating videos folder:', error)
 
         if (error.status === 401 || error.status === 403) {
-            localStorage.clear()
-            window.location.reload()
+            handleAuthError(error)
         }
 
         throw error
@@ -282,8 +281,7 @@ export const loadVideosFromDrive = async (): Promise<VideoItem[]> => {
         console.error('Error loading videos from Drive:', error)
 
         if (error.status === 401 || error.status === 403) {
-            localStorage.clear()
-            window.location.reload()
+            handleAuthError(error)
         }
 
         return []

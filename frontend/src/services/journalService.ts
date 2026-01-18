@@ -4,6 +4,7 @@ export interface JournalEntry {
     date: string
     mood: string
     note: string
+    timestamp?: string  // Full ISO timestamp with time
 }
 
 const JOURNAL_FILE_NAME = 'journal_entries.json'

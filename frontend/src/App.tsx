@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import Note from './components/Note'
 import Videos from './components/Videos'
@@ -7,14 +7,32 @@ import HomeDashboard from './components/HomeDashboard'
 import Journal from './components/Journal'
 import AiChat from './components/AiChat'
 import CommunicationCoach from './components/CommunicationCoach'
+import DayActivities from './components/DayActivities'
 import Login from './components/Login'
-import { isAuthenticated, getCurrentUser, silentTokenRefresh } from './services/googleDrive'
+import BottomNav from './components/BottomNav'
+import { ToastProvider } from './components/ToastProvider'
+import { isAuthenticated, getCurrentUser, silentTokenRefresh, signOut } from './services/googleDrive'
 import { AppDataProvider } from './contexts/AppDataContext'
 
 function App() {
     const [currentPage, setCurrentPage] = useState('home')
     const [authenticated, setAuthenticated] = useState(false)
     const [loading, setLoading] = useState(true)
+    const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+    const [selectedDate, setSelectedDate] = useState<string>('')
+
+    // Simple navigation function
+    const navigateTo = useCallback((page: string) => {
+        console.log('Navigating to:', page)
+        setCurrentPage(page)
+    }, [])
+
+    // Navigate to day activities page
+    const navigateToDayActivities = useCallback((date: string) => {
+        console.log('Navigating to day-activities for date:', date)
+        setSelectedDate(date)
+        setCurrentPage('day-activities')
+    }, [])
 
     useEffect(() => {
         // Check if user is authenticated (persistent login)
@@ -42,6 +60,7 @@ function App() {
     const handleSignOut = () => {
         setAuthenticated(false)
         setCurrentPage('home')
+        signOut()
     }
 
     if (loading) {
@@ -57,54 +76,72 @@ function App() {
     }
 
     return (
-        <AppDataProvider isAuthenticated={authenticated}>
-            <div className="min-h-screen bg-background">
-                {/* Show header on all pages except note page */}
-                {currentPage !== 'note' && (
-                    <Header
-                        onPageChange={setCurrentPage}
-                        currentPage={currentPage}
-                        onSignOut={handleSignOut}
-                    />
-                )}
+        <ToastProvider onRelogin={handleSignOut}>
+            <AppDataProvider isAuthenticated={authenticated}>
+                {/* Main container with bottom padding for mobile nav */}
+                <div className="min-h-screen bg-background pb-24 md:pb-0">
+                    {/* Show header on all pages except note page */}
+                    {currentPage !== 'note' && (
+                        <Header
+                            onPageChange={navigateTo}
+                            currentPage={currentPage}
+                            onSignOut={handleSignOut}
+                        />
+                    )}
 
-                {currentPage === 'home' && (
-                    <HomeDashboard onNavigateTo={setCurrentPage} />
-                )}
+                    {currentPage === 'home' && (
+                        <HomeDashboard
+                            onNavigateTo={navigateTo}
+                            onDateSelect={navigateToDayActivities}
+                        />
+                    )}
 
-                {currentPage === 'note' && (
-                    <Note onBack={() => setCurrentPage('home')} />
-                )}
+                    {currentPage === 'note' && (
+                        <Note onBack={() => window.history.back()} />
+                    )}
 
-                {currentPage === 'habits' && (
-                    <div className="p-4 md:p-8">
-                        <Habits />
-                    </div>
-                )}
+                    {currentPage === 'habits' && (
+                        <div className="p-4 md:p-8">
+                            <Habits />
+                        </div>
+                    )}
 
-                {currentPage === 'videos' && (
-                    <Videos />
-                )}
+                    {currentPage === 'videos' && (
+                        <Videos onVideoPlaying={setIsVideoPlaying} />
+                    )}
 
-                {currentPage === 'journal' && (
-                    <Journal onBack={() => setCurrentPage('home')} />
-                )}
+                    {currentPage === 'journal' && (
+                        <Journal onBack={() => window.history.back()} />
+                    )}
 
-                {currentPage === 'ai-chat' && (
-                    <AiChat
-                        userEmail={getCurrentUser()?.email || 'anonymous'}
-                        onBack={() => setCurrentPage('home')}
-                    />
-                )}
+                    {currentPage === 'ai-chat' && (
+                        <AiChat
+                            userEmail={getCurrentUser()?.email || 'anonymous'}
+                            onBack={() => window.history.back()}
+                        />
+                    )}
 
-                {currentPage === 'communication-coach' && (
-                    <CommunicationCoach
-                        userEmail={getCurrentUser()?.email || 'anonymous'}
-                        onBack={() => setCurrentPage('home')}
-                    />
-                )}
-            </div>
-        </AppDataProvider>
+                    {currentPage === 'communication-coach' && (
+                        <CommunicationCoach
+                            userEmail={getCurrentUser()?.email || 'anonymous'}
+                            onBack={() => window.history.back()}
+                        />
+                    )}
+
+                    {currentPage === 'day-activities' && selectedDate && (
+                        <DayActivities
+                            date={selectedDate}
+                            onBack={() => window.history.back()}
+                        />
+                    )}
+
+                    {/* Global Mobile Bottom Navigation - Hidden during video playback */}
+                    {currentPage !== 'videos' || !isVideoPlaying ? (
+                        <BottomNav currentPage={currentPage} onNavigateTo={navigateTo} />
+                    ) : null}
+                </div>
+            </AppDataProvider>
+        </ToastProvider>
     )
 }
 

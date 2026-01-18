@@ -1,5 +1,5 @@
 import { GOOGLE_CONFIG } from '../config/google'
-import { refreshTokenIfNeeded, getCurrentUser } from './googleDrive'
+import { refreshTokenIfNeeded, getCurrentUser, handleAuthError } from './googleDrive'
 
 export interface Habit {
     id: string
@@ -99,8 +99,7 @@ const getOrCreateHabitsFolder = async (): Promise<string> => {
         console.error('Error getting/creating habits folder:', error)
 
         if (error.status === 401 || error.status === 403) {
-            localStorage.clear()
-            window.location.reload()
+            handleAuthError(error)
         }
 
         throw error
@@ -201,8 +200,7 @@ export const loadHabitsFromDrive = async (): Promise<{ habits: Habit[], entries:
         console.error('Error loading habits from Drive:', error)
 
         if (error.status === 401 || error.status === 403) {
-            localStorage.clear()
-            window.location.reload()
+            handleAuthError(error)
         }
 
         return { habits: [], entries: [] }

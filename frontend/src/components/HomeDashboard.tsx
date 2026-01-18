@@ -1,34 +1,48 @@
 import { useState, useEffect } from 'react'
 import { Habit, HabitEntry, getTodayDate, getDateDaysAgo, calculateStreaks } from '../services/habitsService'
 import { NoteItem } from '../services/notesService'
-import { saveJournalToDrive, loadJournalFromDrive } from '../services/journalService'
+import { JournalEntry, loadJournalFromDrive } from '../services/journalService'
 import { getDailyQuote } from '../services/apiService'
 import AuroraBackground from './ui/AuroraBackground'
 import { CountUp } from './ui/AnimatedText'
+import Calendar from './Calendar'
+import ActivityTracker from './ActivityTracker'
 
 interface HomeDashboardProps {
     onNavigateTo: (page: string) => void
+    onDateSelect?: (date: string) => void
 }
 
-export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
+export default function HomeDashboard({ onNavigateTo, onDateSelect }: HomeDashboardProps) {
     const [habits, setHabits] = useState<Habit[]>([])
     const [entries, setEntries] = useState<HabitEntry[]>([])
     const [notes, setNotes] = useState<NoteItem[]>([])
+    const [journalEntries, setJournalEntries] = useState<Record<string, JournalEntry>>({})
     const [currentTime, setCurrentTime] = useState(new Date())
     const [dailyQuote, setDailyQuote] = useState<string>('')
+    const [selectedDate, setSelectedDate] = useState<string>(getTodayDate())
 
     useEffect(() => {
         loadData()
         const timer = setInterval(() => setCurrentTime(new Date()), 1000)
 
-        // Load today's check-in from Drive
-        loadTodaysCheckIn()
-
         // Load daily quote from backend
         loadDailyQuote()
 
+        // Load journal entries for calendar
+        loadJournalEntries()
+
         return () => clearInterval(timer)
     }, [])
+
+    const loadJournalEntries = async () => {
+        try {
+            const entries = await loadJournalFromDrive()
+            setJournalEntries(entries)
+        } catch (error) {
+            console.log('Could not load journal entries:', error)
+        }
+    }
 
     const loadDailyQuote = async () => {
         try {
@@ -40,34 +54,7 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
         }
     }
 
-    const loadTodaysCheckIn = async () => {
-        try {
-            const checkins = await loadJournalFromDrive()
-            const todayStr = getTodayDate()
-            if (checkins[todayStr]) {
-                setTodaysMood(checkins[todayStr].mood)
-                setTodaysNote(checkins[todayStr].note)
-            }
-        } catch (error) {
-            console.error('Error loading check-in:', error)
-        }
-    }
 
-    const [showCheckInModal, setShowCheckInModal] = useState(false)
-    const [todaysMood, setTodaysMood] = useState<string | null>(null)
-    const [todaysNote, setTodaysNote] = useState('')
-
-    const handleSaveCheckIn = async () => {
-        try {
-            const checkins = await loadJournalFromDrive()
-            const todayStr = getTodayDate()
-            checkins[todayStr] = { mood: todaysMood!, note: todaysNote, date: todayStr }
-            await saveJournalToDrive(checkins)
-            setShowCheckInModal(false)
-        } catch (error) {
-            console.error('Error saving check-in:', error)
-        }
-    }
 
     const loadData = () => {
         // Load habits
@@ -155,15 +142,15 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, 3)
 
-    // Motivation messages
-    const motivationMessages = [
+    // Motivation messages (used for potential future feature)
+    const _motivationMessages = [
         { condition: todayPercentage === 100, message: "Perfect! You've completed all habits today! 🎉", icon: "🏆" },
         { condition: todayPercentage >= 75, message: "Amazing work! You're crushing it today! 💪", icon: "🔥" },
         { condition: todayPercentage >= 50, message: "Great progress! Keep the momentum going! ⭐", icon: "✨" },
         { condition: longestStreak >= 7, message: `${longestStreak} day streak! You're unstoppable! 🚀`, icon: "🌟" },
         { condition: true, message: "Every habit completed is a step forward! 🌱", icon: "💚" }
     ]
-    const motivation = motivationMessages.find(m => m.condition) || motivationMessages[motivationMessages.length - 1]
+    void _motivationMessages // Suppress unused warning
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50 p-4 md:p-8 relative overflow-hidden">
@@ -212,6 +199,23 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                         </div>
                     )}
 
+                    {/* Activity Tracker - Input & Timeline */}
+                    <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.12s' }}>
+                        <ActivityTracker />
+                    </div>
+
+                    {/* Activity Calendar */}
+                    <div className="lg:col-span-2 animate-slideUp" style={{ animationDelay: '0.15s' }}>
+                        <Calendar
+                            activityDates={Object.values(journalEntries).map(e => e.date)}
+                            selectedDate={selectedDate}
+                            onDateSelect={(date) => {
+                                setSelectedDate(date)
+                                onDateSelect?.(date)
+                            }}
+                        />
+                    </div>
+
                     {/* 2. Overall Progress Ring - White card */}
                     <div className="animate-slideUp" style={{ animationDelay: '0.2s' }}>
                         <div className="bg-white rounded-3xl p-6 shadow-xl border border-purple-100">
@@ -242,17 +246,6 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                         </div>
                     </div>
 
-                    {/* 4. Daily Motivation - White with purple accent */}
-                    <div className="lg:col-span-3 animate-slideUp" style={{ animationDelay: '0.3s' }}>
-                        <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-3xl p-6 shadow-lg border border-purple-200 hover:shadow-xl transition-shadow">
-                            <div className="flex items-center gap-4">
-                                <div className="text-5xl animate-bounce-soft">{motivation.icon}</div>
-                                <div>
-                                    <p className="text-xl font-bold text-black">{motivation.message}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
                     {/* 5. Today's Habits - White card */}
                     <div className="lg:col-span-2 animate-slideUp" style={{ animationDelay: '0.4s' }}>
@@ -428,14 +421,6 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                                     </svg>
                                     <span className="font-bold">Statistics</span>
                                 </button>
-
-                                <button
-                                    onClick={() => setShowCheckInModal(true)}
-                                    className="flex flex-col items-center justify-center p-6 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 active:scale-95 transition-all shadow-lg"
-                                >
-                                    <span className="text-3xl mb-2">✨</span>
-                                    <span className="font-bold">Check-in</span>
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -583,84 +568,24 @@ export default function HomeDashboard({ onNavigateTo }: HomeDashboardProps) {
                     {/* 11. Daily Check-in Button */}
                     <div className="lg:col-span-3 mt-4">
                         <button
-                            onClick={() => setShowCheckInModal(true)}
+                            onClick={() => onNavigateTo('journal')}
                             className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-3xl p-6 shadow-xl hover:scale-[1.02] transition-transform group relative overflow-hidden"
                         >
                             <div className="relative z-10 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <span className="text-3xl">✨</span>
                                     <div className="text-left">
-                                        <h3 className="text-xl font-bold">How is today?</h3>
-                                        <p className="text-teal-100 text-sm">Tap to check in</p>
+                                        <h3 className="text-xl font-bold">Write in your Diary</h3>
+                                        <p className="text-teal-100 text-sm">Capture your thoughts</p>
                                     </div>
                                 </div>
-                                {todaysMood && (
-                                    <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl flex items-center gap-2">
-                                        <span className="text-2xl">{todaysMood}</span>
-                                    </div>
-                                )}
+
                             </div>
                             <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </button>
                     </div>
                 </div>
             </div>
-
-            {/* Check-in Modal */}
-            {showCheckInModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-scaleIn">
-                        <div className="text-center mb-8">
-                            <h2 className="text-2xl font-bold text-black mb-2">How are you feeling?</h2>
-                            <p className="text-black">{currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-                        </div>
-
-                        {/* Mood Selection */}
-                        <div className="flex justify-between mb-8 px-2">
-                            {['🤩', '🙂', '😐', '😕', '😫'].map((mood) => (
-                                <button
-                                    key={mood}
-                                    onClick={() => setTodaysMood(mood)}
-                                    className={`text-4xl p-3 rounded-2xl transition-all hover:scale-110 ${todaysMood === mood
-                                        ? 'bg-indigo-100 ring-2 ring-indigo-500 scale-110'
-                                        : 'hover:bg-gray-100'
-                                        }`}
-                                >
-                                    {mood}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Note Input */}
-                        <div className="mb-8">
-                            <label className="block text-sm font-medium text-black mb-2">Highlight of the day (optional)</label>
-                            <textarea
-                                value={todaysNote}
-                                onChange={(e) => setTodaysNote(e.target.value)}
-                                placeholder="What's on your mind?..."
-                                className="w-full p-4 rounded-xl bg-gray-50 border-none focus:ring-2 focus:ring-indigo-500 resize-none h-32 transition-all"
-                            />
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowCheckInModal(false)}
-                                className="flex-1 py-3 text-black font-medium hover:bg-gray-100 rounded-xl transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSaveCheckIn}
-                                disabled={!todaysMood}
-                                className="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Save Check-in
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }

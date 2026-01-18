@@ -192,10 +192,8 @@ export default function Note({ onBack }: NoteProps) {
     const toggleSidebar = () => {
         // If opening sidebar and has current note, force sync before showing list
         if (!isSidebarOpen && currentNoteId && editorRef.current) {
-            saveCurrentNote()
-            setTimeout(() => {
-                forceSyncNotes(notes)
-            }, 100)
+            const updatedNotes = saveCurrentNote()
+            forceSyncNotes(updatedNotes)
         }
         setIsSidebarOpen(!isSidebarOpen)
     }
@@ -220,11 +218,9 @@ export default function Note({ onBack }: NoteProps) {
         } else {
             // Save current note before switching
             if (currentNoteId && editorRef.current) {
-                saveCurrentNote()
-                // Force sync after a brief delay to ensure current note is saved
-                setTimeout(() => {
-                    forceSyncNotes(notes)
-                }, 100)
+                const updatedNotes = saveCurrentNote()
+                // Force sync to Drive
+                forceSyncNotes(updatedNotes)
             }
 
             setCurrentNoteId(note.id)
@@ -266,32 +262,50 @@ export default function Note({ onBack }: NoteProps) {
         setShowNewNoteModal(false)
     }
 
+    // Save current note content to notes array (for switching notes or syncing)
     const saveCurrentNote = () => {
         if (currentNoteId && editorRef.current) {
-            // Save innerHTML to preserve formatting
             const content = editorRef.current.innerHTML || ''
             const title = currentTitle || 'Untitled'
             const updatedNotes = notes.map(note =>
                 note.id === currentNoteId ? { ...note, content, title } : note
             )
             setNotes(updatedNotes)
-            syncNotes(updatedNotes)
-
-            // Add to history for undo/redo
-            setHistory(prev => [...prev.slice(0, historyIndex + 1), content])
-            setHistoryIndex(prev => prev + 1)
+            return updatedNotes
         }
+        return notes
     }
 
-    // Handle editor input with auto-save
+    // Debounced save to localStorage only (no state update - prevents cursor jumping on mobile)
+    const debouncedSaveRef = useRef<number | null>(null)
+
     const handleInput = () => {
-        saveCurrentNote()
+        // Clear any pending save
+        if (debouncedSaveRef.current) {
+            clearTimeout(debouncedSaveRef.current)
+        }
+
+        // Debounce: save to localStorage after 1 second of no typing
+        debouncedSaveRef.current = window.setTimeout(() => {
+            if (currentNoteId && editorRef.current) {
+                const content = editorRef.current.innerHTML || ''
+                const title = currentTitle || 'Untitled'
+
+                // Update notes array without triggering re-render
+                const updatedNotes = notes.map(note =>
+                    note.id === currentNoteId ? { ...note, content, title } : note
+                )
+
+                // Only save to localStorage, don't update state
+                localStorage.setItem('notes_backup', JSON.stringify(updatedNotes))
+            }
+        }, 1000)
     }
 
     const handleTitleChange = (e: React.FormEvent<HTMLHeadingElement>) => {
         const newTitle = e.currentTarget.textContent || ''
         setCurrentTitle(newTitle)
-        saveCurrentNote()
+        // Don't call saveCurrentNote here - just update title state
     }
 
     const toggleDeleteMode = () => {
@@ -323,7 +337,7 @@ export default function Note({ onBack }: NoteProps) {
                 editorRef.current.innerHTML = ''
             }
         }
-        syncNotes(updatedNotes)
+        forceSyncNotes(updatedNotes)
     }
 
     const startEditingTitle = (note: NoteItem, e: React.MouseEvent) => {
@@ -382,7 +396,7 @@ export default function Note({ onBack }: NoteProps) {
     )
 
     return (
-        <div className="flex h-screen bg-white overflow-hidden max-w-full">
+        <div className="flex h-screen bg-white overflow-hidden max-w-full" style={{ height: '100dvh' }}>
             {/* Sidebar - Full screen on mobile, side panel on desktop */}
             <div
                 className={`fixed inset-0 sm:left-0 sm:top-16 sm:bottom-0 sm:w-80 sm:max-w-full bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 z-50 sm:z-30 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -390,7 +404,7 @@ export default function Note({ onBack }: NoteProps) {
             >
                 <div className="flex flex-col h-full">
                     {/* Sidebar Header */}
-                    <div className="p-4 border-b border-gray-200">
+                    <div className="p-4 border-b border-gray-200 safe-top">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-bold text-gray-800">My Notes</h2>
                             <div className="flex gap-2">
@@ -443,7 +457,8 @@ export default function Note({ onBack }: NoteProps) {
                                 placeholder="Search notes..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent transition-all text-sm"
+                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent transition-all text-base"
+                                style={{ fontSize: '16px' }}
                             />
                         </div>
 
@@ -588,7 +603,7 @@ export default function Note({ onBack }: NoteProps) {
             {/* Main Content */}
             <div className={`flex flex-col transition-all duration-300 ${isSidebarOpen ? 'sm:ml-80' : 'ml-0'} max-w-full overflow-hidden h-screen`}>
                 {/* Editor Header */}
-                <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+                <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between safe-top">
                     {/* Left: Global Menu (☰) */}
                     <button
                         onClick={onBack}
@@ -667,20 +682,19 @@ export default function Note({ onBack }: NoteProps) {
                 </div>
 
                 {/* Editor Area - Medium style */}
-                <div className="flex-1 overflow-y-auto bg-white">
+                <div className="flex-1 overflow-y-auto bg-white pb-20">
                     {currentNoteId ? (
-                        <div className="max-w-[680px] mx-auto px-6 py-12">
+                        <div className="max-w-[680px] mx-auto px-4 sm:px-6 py-8 safe-bottom">
                             {/* Title */}
                             <h1
                                 ref={titleRef}
                                 contentEditable={!isLocked}
                                 onInput={handleTitleChange}
                                 suppressContentEditableWarning
-                                className="text-4xl sm:text-5xl font-bold text-gray-900 mb-8 outline-none focus:outline-none"
+                                className="text-3xl sm:text-5xl font-bold text-gray-900 mb-6 sm:mb-8 outline-none focus:outline-none"
                                 style={{
                                     fontFamily: 'Georgia, serif',
-                                    lineHeight: '1.2',
-                                    letterSpacing: '-0.02em'
+                                    lineHeight: '1.2'
                                 }}
                             >
                                 {currentTitle || 'Untitled'}
@@ -694,8 +708,7 @@ export default function Note({ onBack }: NoteProps) {
                                 className="text-xl text-gray-800 outline-none focus:outline-none min-h-[400px]"
                                 style={{
                                     fontFamily: 'Georgia, serif',
-                                    lineHeight: '1.58',
-                                    letterSpacing: '-0.003em'
+                                    lineHeight: '1.58'
                                 }}
                                 suppressContentEditableWarning
                             />
