@@ -219,56 +219,46 @@ export const isTokenExpired = (): boolean => {
     return Date.now() >= parseInt(expiryStr)
 }
 
-// Silent token refresh - call on app startup
+// Silent token refresh - just restore existing token on app startup
+// Don't try popup refresh (browsers block it) - if token expired, API calls will handle it
 export const silentTokenRefresh = async (): Promise<boolean> => {
     const user = getCurrentUser()
     if (!user) return false
 
-    // If token not expired, just restore it
-    if (!isTokenExpired()) {
-        try {
-            await initializeGoogleAPI()
-            await initializeGIS()
-            if (window.gapi?.client) {
-                window.gapi.client.setToken({ access_token: user.accessToken })
-            }
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    // Token expired - try silent refresh
     try {
         await initializeGoogleAPI()
         await initializeGIS()
 
-        return new Promise((resolve) => {
-            const client = window.google.accounts.oauth2.initTokenClient({
-                client_id: GOOGLE_CONFIG.clientId,
-                scope: GOOGLE_CONFIG.scopes.join(' '),
-                callback: async (response: any) => {
-                    if (response.error) {
-                        console.log('Silent refresh failed, user needs to re-login')
-                        resolve(false)
-                        return
-                    }
-
-                    // Update token
-                    window.gapi.client.setToken({ access_token: response.access_token })
-                    user.accessToken = response.access_token
-                    localStorage.setItem('googleUser', JSON.stringify(user))
-                    localStorage.setItem('tokenExpiry', (Date.now() + 3600000).toString())
-                    console.log('✅ Token refreshed silently')
-                    resolve(true)
-                },
-            })
-
-            // Request token without prompt (silent)
-            client.requestAccessToken({ prompt: '' })
-        })
+        // Just restore the existing token - don't try to refresh
+        if (window.gapi?.client && user.accessToken) {
+            window.gapi.client.setToken({ access_token: user.accessToken })
+            console.log('✅ Token restored from localStorage')
+            return true
+        }
+        return false
     } catch (error) {
-        console.error('Silent refresh error:', error)
+        console.log('Could not restore token, will prompt for re-login when needed')
         return false
     }
+}
+
+// Handle auth errors - DON'T clear localStorage (keep user logged in like Instagram)
+// Dispatch event for UI to show toast notification
+let authErrorShown = false // Prevent showing multiple times
+export const handleAuthError = (error: any): void => {
+    console.warn('Auth error occurred, will retry on next app restart:', error)
+
+    // Show toast notification only once per session
+    if (!authErrorShown) {
+        authErrorShown = true
+        window.dispatchEvent(new CustomEvent('auth-error'))
+    }
+
+    // DON'T clear localStorage - user stays logged in
+    // DON'T reload page - let the app continue with cached data
+}
+
+// Reset auth error flag (called after re-login)
+export const resetAuthErrorFlag = (): void => {
+    authErrorShown = false
 }

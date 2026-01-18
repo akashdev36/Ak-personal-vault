@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { VideoItem, parseVideoUrl, getYouTubeThumbnail, extractInstagramVideoUrl } from '../services/videosService'
 import { downloadVideoBlob, uploadToYouTube } from '../services/youtubeService'
 import { useVideos } from '../hooks/useVideos'
 import VideoPlayer from './VideoPlayer'
 import ConfirmDialog from './ConfirmDialog'
 
-export default function Videos() {
+interface VideosProps {
+    onVideoPlaying?: (isPlaying: boolean) => void
+}
+
+export default function Videos({ onVideoPlaying }: VideosProps) {
     // Use custom hook for video management
     const { videos, loading, addVideo, deleteVideos } = useVideos()
 
@@ -21,6 +25,11 @@ export default function Videos() {
 
     // Video Player State
     const [selectedVideo, setSelectedVideo] = useState<VideoItem | null>(null)
+
+    // Notify parent when video player state changes
+    useEffect(() => {
+        onVideoPlaying?.(selectedVideo !== null)
+    }, [selectedVideo, onVideoPlaying])
 
     // Multi-select State
     const [multiSelectMode, setMultiSelectMode] = useState(false)

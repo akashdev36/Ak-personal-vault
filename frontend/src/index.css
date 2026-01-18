@@ -161,7 +161,19 @@ body {
   [contenteditable] {
     -webkit-user-select: text;
     user-select: text;
-    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent zoom on input focus (iOS) - min 16px font */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Fix keyboard covering content on mobile */
+  .keyboard-aware {
+    height: 100dvh;
+    min-height: -webkit-fill-available;
   }
 
   /* Ensure HTML renders properly on mobile */
@@ -177,5 +189,21 @@ body {
   /* Prevent HTML tags from showing */
   .prose:focus {
     outline: none;
+  }
+
+  /* Toast slide animation */
+  @keyframes slideDown {
+    from {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slideDown {
+    animation: slideDown 0.3s ease-out forwards;
   }
 }

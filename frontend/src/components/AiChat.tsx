@@ -332,7 +332,7 @@ export default function AiChat({ userEmail, onBack }: AiChatProps) {
             </div>
 
             {/* WhatsApp-style Input Bar */}
-            <div className="bg-[#f0f0f0] px-2 py-2 flex items-center gap-2">
+            <div className="bg-[#f0f0f0] px-2 py-2 pb-4 md:pb-2 flex items-center gap-2">
                 <button className="p-2 text-gray-500 hover:text-gray-700">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

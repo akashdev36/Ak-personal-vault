@@ -1,5 +1,5 @@
 import { GOOGLE_CONFIG } from '../config/google'
-import { refreshTokenIfNeeded } from './googleDrive'
+import { refreshTokenIfNeeded, handleAuthError } from './googleDrive'
 
 export interface NoteItem {
     id: number
@@ -52,10 +52,9 @@ const getOrCreateNotesFolder = async (): Promise<string> => {
     } catch (error: any) {
         console.error('Error getting/creating folder:', error)
 
-        // Handle authentication errors
+        // Handle authentication errors - don't log out user
         if (error.status === 401 || error.status === 403) {
-            localStorage.clear()
-            window.location.reload()
+            handleAuthError(error)
         }
 
         throw error
@@ -157,10 +156,9 @@ export const loadNotesFromDrive = async (): Promise<NoteItem[]> => {
     } catch (error: any) {
         console.error('Error loading notes from Drive:', error)
 
-        // Handle authentication errors
+        // Handle authentication errors - don't log out user
         if (error.status === 401 || error.status === 403) {
-            localStorage.clear()
-            window.location.reload()
+            handleAuthError(error)
         }
 
         return []
